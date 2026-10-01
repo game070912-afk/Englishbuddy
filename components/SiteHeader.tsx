@@ -14,6 +14,9 @@ export default function SiteHeader() {
           <Link href="/chat" className="transition hover:text-indigo-500">
             对话练习
           </Link>
+          <Link href="/correct" className="transition hover:text-indigo-500">
+            语法纠错
+          </Link>
         </nav>
       </div>
     </header>

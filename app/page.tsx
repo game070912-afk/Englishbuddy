@@ -10,7 +10,7 @@ const FEATURES: ReadonlyArray<{ title: string; description: string; available: b
   {
     title: "语法与表达纠错",
     description: "标注错误类型并给出更地道的说法，支持整段批改。",
-    available: false,
+    available: true,
   },
   {
     title: "词汇卡片",
@@ -27,12 +27,20 @@ export default function Home() {
         <p className="text-base leading-relaxed text-slate-600">
           你的 AI 英语陪练：随时开口说，说错了当场纠正。
         </p>
-        <Link
-          href="/chat"
-          className="mt-2 w-fit rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-600"
-        >
-          开始对话练习
-        </Link>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <Link
+            href="/chat"
+            className="w-fit rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-600"
+          >
+            开始对话练习
+          </Link>
+          <Link
+            href="/correct"
+            className="w-fit rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-500"
+          >
+            批改一段英文
+          </Link>
+        </div>
       </section>
 
       <section className="mt-10 grid gap-4 sm:grid-cols-3">

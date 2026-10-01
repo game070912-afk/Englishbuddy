@@ -26,17 +26,25 @@ function resolveConfig(): { baseUrl: string; apiKey: string } {
 }
 
 /**
+ * 提前校验 AI 配置是否就绪，让接口能在开流之前就返回明确错误。
+ */
+export function assertAiConfigured(): void {
+  const { apiKey } = resolveConfig();
+
+  if (!apiKey) {
+    throw new AppError("AI 服务尚未配置，请检查环境变量", "AI_NOT_CONFIGURED", 500);
+  }
+}
+
+/**
  * 调用 DeepSeek 聊天接口并以流的形式返回原始响应体。
  * 密钥只在本模块（服务端）读取，绝不出现在客户端代码中。
  */
 export async function createChatCompletionStream(
   options: ChatCompletionOptions,
 ): Promise<ReadableStream<Uint8Array>> {
+  assertAiConfigured();
   const { baseUrl, apiKey } = resolveConfig();
-
-  if (!apiKey) {
-    throw new AppError("AI 服务尚未配置，请检查环境变量", "AI_NOT_CONFIGURED", 500);
-  }
 
   let response: Response;
   try {

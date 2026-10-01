@@ -9,7 +9,7 @@
 | 功能 | 状态 | 说明 |
 | --- | --- | --- |
 | 英语对话练习 | ✅ 可用 | 模拟外教 Alex，可指定话题与难度，回复流式输出 |
-| 语法 / 表达纠错 | 🚧 开发中 | 标注错误类型并给出更地道的说法 |
+| 语法 / 表达纠错 | ✅ 可用 | 标注错误类型（语法/用词/风格/表达）并给出更地道的说法 |
 | 词汇查询与学习卡片 | 🚧 开发中 | 结合上下文生成释义与例句 |
 
 ## 技术栈
@@ -78,6 +78,30 @@ data: {"type":"done","reason":"stop"}
 ```
 
 错误码：`INVALID_REQUEST` / `AI_NOT_CONFIGURED` / `AI_UPSTREAM_ERROR` / `AI_STREAM_ERROR` / `INTERNAL_ERROR`
+
+### `POST /api/correct`
+
+语法纠错接口，同样只在服务端读取密钥。
+
+请求体：
+
+```json
+{ "text": "I wants to practice my English." }
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| text | string | 是 | 待批改的英文，≤2000 字符 |
+
+成功响应：`text/event-stream`，先给修改后的整段，再逐条推送批改意见：
+
+```
+data: {"type":"corrected","text":"I want to practice my English."}
+data: {"type":"item","item":{"original":"I wants","suggestion":"I want","type":"grammar","explanation":"主语 I 后接动词原形"}}
+data: {"type":"done"}
+```
+
+模型输出完全无法解析时会自动重试一次，仍失败则推送 `{"type":"error","message":"..."}`。
 
 ## 目录结构
 
