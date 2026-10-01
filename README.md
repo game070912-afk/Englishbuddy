@@ -1,5 +1,8 @@
 # EnglishBuddy
 
+[![CI](https://github.com/game070912-afk/Englishbuddy/actions/workflows/ci.yml/badge.svg)](https://github.com/game070912-afk/Englishbuddy/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
 基于大模型的英语学习助手：开口说话，说错了当场纠正。
 
 > **AI 协作开发说明**：需求定义、产品创意、AI 编排与验收由人负责；代码实现、测试用例、文档初稿由 AI 生成并经人工审查。详见 [AI-COLLAB.md](./AI-COLLAB.md)。
