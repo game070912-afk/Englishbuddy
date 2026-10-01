@@ -4,6 +4,9 @@ import { buildTutorSystemPrompt } from "@/lib/api/prompts";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";
 import { parseChatRequestBody } from "@/lib/utils/validate";
 
+/** 部署到 Vercel 时允许的最长执行时间（流式回复需要） */
+export const maxDuration = 60;
+
 /** 事件流的编码工具 */
 const encoder = new TextEncoder();
 

@@ -103,6 +103,18 @@ data: {"type":"done"}
 
 模型输出完全无法解析时会自动重试一次，仍失败则推送 `{"type":"error","message":"..."}`。
 
+## 部署
+
+Vercel 一键导入即可，环境变量只填 `DEEPSEEK_API_KEY`。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)。
+
+## 架构决策
+
+关键取舍记录在 [docs/decisions/](./docs/decisions/)，例如「为什么选 DeepSeek + SSE/JSON Lines 流式输出」。
+
+## 开源协议
+
+[MIT](./LICENSE)
+
 ## 目录结构
 
 ```
@@ -110,6 +122,7 @@ app/            路由页面与 API Route Handlers
 components/     UI 组件
 lib/api/        AI 调用与提示词封装
 lib/types/      共享类型
-lib/utils/      输入校验工具
+lib/utils/      输入校验与解析工具
+docs/           部署文档与架构决策记录
 tests/          Vitest 用例
 ```

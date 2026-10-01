@@ -14,6 +14,9 @@ import type {
 import { parseCorrectionLine } from "@/lib/utils/correction";
 import { MAX_MESSAGE_LENGTH, sanitizeUserText } from "@/lib/utils/validate";
 
+/** 部署到 Vercel 时允许的最长执行时间（流式批改需要） */
+export const maxDuration = 60;
+
 /** 事件流的编码工具 */
 const encoder = new TextEncoder();
 /** 最多重试一次 */

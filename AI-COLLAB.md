@@ -33,3 +33,11 @@
 - AI 产出：`lib/types/correction.ts`、`lib/utils/correction.ts`（JSON Lines 解析与校验）、`app/api/correct/route.ts`（流式批改 + 解析失败自动重试一次）、`components/CorrectPanel.tsx`、`app/correct/page.tsx`；测试 11 个（接口 5 + 解析 6），累计 24 个全通过
 - 我做的决定：纠错结果用 JSON Lines 流式输出（兼顾「边生成边看到」和结构化），而不是先憋完整 JSON 再返回；模型输出全无法解析时自动重试一次，仍失败给中文提示
 - 待我确认：密钥填好后本地跑通 `/correct`；下一步是否上 Supabase Auth + 数据库
+
+## 2026-10-02（第三次：开源与上线前置）
+
+- 我下的指令：你决定（授权 AI 判断优先级）
+- AI 的判断：先把开源与部署前置做完，而不是继续加功能。理由——已有 2 个可用功能，有个能分享的在线链接比再加一个功能更能证明项目是真的；且部署能提前暴露环境变量配置问题
+- AI 产出：`LICENSE`（MIT）、`.github/workflows/ci.yml`（push/PR 自动跑 typecheck+test+lint+build）、`docs/deploy.md`（Vercel 步骤 + 4 个坑）、`docs/decisions/0001-...md`（ADR：为什么选 DeepSeek + SSE/JSON Lines）、两个接口加 `maxDuration = 60`（防 Vercel 流式超时）
+- 我做的决定：待确认 ADR 0001 的结论是否认可（AI 已起草，等你签字或修改）
+- 我需要亲自做的：① 在 Vercel 导入仓库并填 `DEEPSEEK_API_KEY` ② 把代码推到 GitHub（需先授权 GitHub 连接器或自己 git remote add）
