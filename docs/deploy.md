@@ -10,7 +10,10 @@
 
    | 名称 | 值 | 说明 |
    | --- | --- | --- |
-   | `DEEPSEEK_API_KEY` | 你的 DeepSeek 密钥 | 必填，服务端专用 |
+   | `AI_PROVIDER` | `zhipu` | 选填，默认已是 zhipu |
+   | `AI_API_KEY` | 你的 AI 密钥 | 必填，服务端专用 |
+
+   还没有密钥？先看 [free-ai-api.md](./free-ai-api.md)，智谱 GLM-4.7-Flash **完全免费**，手机号注册即可，3 分钟搞定。
 
 4. 点击 **Deploy**，等 1–2 分钟拿到线上域名
 5. 打开域名验证：`/` 首页、`/chat` 对话、`/correct` 批改

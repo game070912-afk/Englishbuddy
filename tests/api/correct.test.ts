@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/correct/route";
 import type { CorrectionErrorResponse } from "@/lib/types/correction";
 
-/** 构造一段模拟的 DeepSeek SSE 响应体 */
+/** 构造一段模拟的上游 SSE 响应体 */
 function createFakeUpstreamStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
@@ -34,12 +34,12 @@ async function readAll(response: Response): Promise<string> {
 
 describe("POST /api/correct", () => {
   beforeEach(() => {
-    process.env.DEEPSEEK_API_KEY = "test-key";
+    process.env.AI_API_KEY = "test-key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.AI_API_KEY;
   });
 
   it("缺少 text 字段时返回 400", async () => {
@@ -92,7 +92,7 @@ describe("POST /api/correct", () => {
   });
 
   it("未配置密钥时返回中文错误提示", async () => {
-    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.AI_API_KEY;
 
     const response = await POST(createRequest({ text: "I wants to practice." }));
 

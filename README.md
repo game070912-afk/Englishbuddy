@@ -20,7 +20,7 @@
 - Next.js 16（App Router）+ TypeScript（strict）
 - Tailwind CSS 4
 - Supabase（Auth + Postgres，第二步接入）
-- DeepSeek API（OpenAI 兼容格式）
+- AI 供应商可插拔：默认智谱 GLM-4.7-Flash（**免费**），可一键切换 DeepSeek 或任意 OpenAI 兼容服务
 
 ## 本地开发
 
@@ -29,8 +29,10 @@
 
    ```bash
    cp .env.example .env.local
-   # 编辑 .env.local，填入 DEEPSEEK_API_KEY
+   # 编辑 .env.local，填入 AI_API_KEY
    ```
+
+   没有密钥？**不需要花钱**：照着 [docs/free-ai-api.md](./docs/free-ai-api.md) 注册智谱开放平台，3 分钟拿到免费密钥。
 
 3. 启动开发服务器：`pnpm dev`，打开 <http://localhost:3000>
 
@@ -108,11 +110,11 @@ data: {"type":"done"}
 
 ## 部署
 
-Vercel 一键导入即可，环境变量只填 `DEEPSEEK_API_KEY`。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)。
+Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
 
 ## 架构决策
 
-关键取舍记录在 [docs/decisions/](./docs/decisions/)，例如「为什么选 DeepSeek + SSE/JSON Lines 流式输出」。
+关键取舍记录在 [docs/decisions/](./docs/decisions/)，例如「为什么做成供应商可插拔 + SSE/JSON Lines 流式输出」。
 
 ## 开源协议
 

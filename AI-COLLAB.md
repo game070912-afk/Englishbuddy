@@ -41,3 +41,12 @@
 - AI 产出：`LICENSE`（MIT）、`.github/workflows/ci.yml`（push/PR 自动跑 typecheck+test+lint+build）、`docs/deploy.md`（Vercel 步骤 + 4 个坑）、`docs/decisions/0001-...md`（ADR：为什么选 DeepSeek + SSE/JSON Lines）、两个接口加 `maxDuration = 60`（防 Vercel 流式超时）
 - 我做的决定：待确认 ADR 0001 的结论是否认可（AI 已起草，等你签字或修改）
 - 我需要亲自做的：① 在 Vercel 导入仓库并填 `DEEPSEEK_API_KEY` ② 把代码推到 GitHub（需先授权 GitHub 连接器或自己 git remote add）
+
+## 2026-10-02（第四次：零成本 AI 方案 + 供应商可插拔）
+
+- 我下的指令：DeepSeek 要花钱，教我不花钱怎么搞，要不你帮我搞一下
+- AI 的判断：不换架构，只换供应商。理由——AI 调用本来就收在 `lib/api/` 一个文件里，换供应商是配置问题不是代码问题；智谱 GLM-4.7-Flash 官方标注免费、国内直连、OpenAI 兼容，是最省事的解
+- AI 产出：`lib/api/ai.ts`（原 `deepseek.ts`，改为厂商中立 + `AI_PROVIDER` 预设机制）、`docs/free-ai-api.md`（注册到上线的完整步骤）、`docs/decisions/0002-...md`（ADR 记录这次选型）、新增 6 个配置解析测试（累计 30 个）、README/deploy 文档同步
+- 顺手修的 bug：`.gitignore` 里 `.env*` 把模板文件 `.env.example` 也忽略了，仓库里根本没有配置模板，而 README 却写着 `cp .env.example .env.local`——加 `!.env.example` 例外并补交模板
+- 我做的决定：默认供应商选免费方案（让克隆仓库的人零成本就能跑）；环境变量从 `DEEPSEEK_*` 迁到 `AI_*`，旧变量名保留兼容
+- 我需要亲自做的：① 注册 <https://open.bigmodel.cn/> 拿免费密钥 ② 填进 `.env.local` 的 `AI_API_KEY` ③ Vercel 上加 `AI_PROVIDER=zhipu` + `AI_API_KEY` 后 Redeploy

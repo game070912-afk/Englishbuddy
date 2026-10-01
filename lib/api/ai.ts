@@ -1,9 +1,33 @@
 import { AppError } from "@/lib/api/errors";
 
-/** DeepSeek 接口地址，可通过环境变量覆盖（便于自建代理） */
-const DEFAULT_BASE_URL = "https://api.deepseek.com";
-/** 默认模型（可用环境变量 DEEPSEEK_MODEL 覆盖） */
-export const DEFAULT_MODEL = "deepseek-v4-flash";
+/**
+ * 内置供应商预设。
+ * 只放「地址 + 默认模型」两件事，换供应商不需要改任何业务代码。
+ */
+const PROVIDER_PRESETS = {
+  /** 智谱开放平台：GLM-4.7-Flash 完全免费，国内直连，学生项目首选 */
+  zhipu: {
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4.7-flash",
+  },
+  /** DeepSeek：性价比高，需要充值 */
+  deepseek: {
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-v4-flash",
+  },
+} as const;
+
+type ProviderName = keyof typeof PROVIDER_PRESETS;
+
+/** 默认走免费供应商，让克隆仓库的人零成本就能跑起来 */
+const DEFAULT_PROVIDER: ProviderName = "zhipu";
+
+export interface AiConfig {
+  provider: ProviderName;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
 /** 兼容 OpenAI 消息格式 */
 export interface CompletionMessage {
@@ -18,19 +42,52 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
 }
 
-/** 读取环境变量中的配置，缺失时使用默认值 */
-function resolveConfig(): { baseUrl: string; apiKey: string; model: string } {
-  const baseUrl = process.env.DEEPSEEK_BASE_URL?.trim() || DEFAULT_BASE_URL;
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim() ?? "";
-  const model = process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
-  return { baseUrl, apiKey, model };
+/** 判断字符串是否是已知的供应商名 */
+function isProviderName(value: string | undefined): value is ProviderName {
+  return value === "zhipu" || value === "deepseek";
+}
+
+/** 取第一个非空的环境变量值 */
+function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 解析 AI 配置。优先级：显式环境变量 > 供应商预设 > 默认供应商。
+ * `DEEPSEEK_*` 是旧变量名，保留兼容，建议改用 `AI_*`。
+ */
+export function resolveAiConfig(): AiConfig {
+  const rawProvider = process.env.AI_PROVIDER?.trim().toLowerCase();
+  const legacyBaseUrl = process.env.DEEPSEEK_BASE_URL?.trim();
+
+  // 只填了旧版地址时，认为用户想用 DeepSeek，避免预设模型张冠李戴
+  const provider: ProviderName = isProviderName(rawProvider)
+    ? rawProvider
+    : legacyBaseUrl
+      ? "deepseek"
+      : DEFAULT_PROVIDER;
+
+  const preset = PROVIDER_PRESETS[provider];
+
+  const baseUrl =
+    firstNonEmpty(process.env.AI_BASE_URL, legacyBaseUrl) ?? preset.baseUrl;
+  const apiKey = firstNonEmpty(process.env.AI_API_KEY, process.env.DEEPSEEK_API_KEY) ?? "";
+  const model = firstNonEmpty(process.env.AI_MODEL, process.env.DEEPSEEK_MODEL) ?? preset.model;
+
+  return { provider, baseUrl, apiKey, model };
 }
 
 /**
  * 提前校验 AI 配置是否就绪，让接口能在开流之前就返回明确错误。
  */
 export function assertAiConfigured(): void {
-  const { apiKey } = resolveConfig();
+  const { apiKey } = resolveAiConfig();
 
   if (!apiKey) {
     throw new AppError("AI 服务尚未配置，请检查环境变量", "AI_NOT_CONFIGURED", 500);
@@ -38,14 +95,14 @@ export function assertAiConfigured(): void {
 }
 
 /**
- * 调用 DeepSeek 聊天接口并以流的形式返回原始响应体。
+ * 调用 OpenAI 兼容的聊天接口并以流的形式返回原始响应体。
  * 密钥只在本模块（服务端）读取，绝不出现在客户端代码中。
  */
 export async function createChatCompletionStream(
   options: ChatCompletionOptions,
 ): Promise<ReadableStream<Uint8Array>> {
   assertAiConfigured();
-  const { baseUrl, apiKey, model } = resolveConfig();
+  const { baseUrl, apiKey, model } = resolveAiConfig();
 
   let response: Response;
   try {

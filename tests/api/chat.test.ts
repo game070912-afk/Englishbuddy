@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
 import type { ChatErrorResponse } from "@/lib/types/chat";
 
-/** 构造一段模拟的 DeepSeek SSE 响应体 */
+/** 构造一段模拟的上游 SSE 响应体 */
 function createFakeUpstreamStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
@@ -29,16 +29,16 @@ function createRequest(body: unknown): Request {
 
 describe("POST /api/chat", () => {
   beforeEach(() => {
-    process.env.DEEPSEEK_API_KEY = "test-key";
+    process.env.AI_API_KEY = "test-key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.AI_API_KEY;
   });
 
   it("未配置密钥时返回中文错误提示", async () => {
-    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.AI_API_KEY;
 
     const response = await POST(
       createRequest({ messages: [{ id: "1", role: "user", content: "hello" }] }),

@@ -1,4 +1,4 @@
-import { createChatCompletionStream, streamTextDeltas, type CompletionMessage } from "@/lib/api/deepseek";
+import { createChatCompletionStream, streamTextDeltas, type CompletionMessage } from "@/lib/api/ai";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildTutorSystemPrompt } from "@/lib/api/prompts";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";

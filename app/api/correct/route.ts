@@ -3,7 +3,7 @@ import {
   createChatCompletionStream,
   streamTextDeltas,
   type CompletionMessage,
-} from "@/lib/api/deepseek";
+} from "@/lib/api/ai";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildCorrectorSystemPrompt } from "@/lib/api/prompts";
 import type {
