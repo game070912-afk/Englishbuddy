@@ -2,8 +2,8 @@ import { AppError } from "@/lib/api/errors";
 
 /** DeepSeek 接口地址，可通过环境变量覆盖（便于自建代理） */
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
-/** 默认模型 */
-export const DEFAULT_MODEL = "deepseek-chat";
+/** 默认模型（可用环境变量 DEEPSEEK_MODEL 覆盖） */
+export const DEFAULT_MODEL = "deepseek-v4-flash";
 
 /** 兼容 OpenAI 消息格式 */
 export interface CompletionMessage {
@@ -19,10 +19,11 @@ export interface ChatCompletionOptions {
 }
 
 /** 读取环境变量中的配置，缺失时使用默认值 */
-function resolveConfig(): { baseUrl: string; apiKey: string } {
+function resolveConfig(): { baseUrl: string; apiKey: string; model: string } {
   const baseUrl = process.env.DEEPSEEK_BASE_URL?.trim() || DEFAULT_BASE_URL;
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim() ?? "";
-  return { baseUrl, apiKey };
+  const model = process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
+  return { baseUrl, apiKey, model };
 }
 
 /**
@@ -44,7 +45,7 @@ export async function createChatCompletionStream(
   options: ChatCompletionOptions,
 ): Promise<ReadableStream<Uint8Array>> {
   assertAiConfigured();
-  const { baseUrl, apiKey } = resolveConfig();
+  const { baseUrl, apiKey, model } = resolveConfig();
 
   let response: Response;
   try {
@@ -55,7 +56,7 @@ export async function createChatCompletionStream(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options.model ?? DEFAULT_MODEL,
+        model: options.model ?? model,
         messages: options.messages,
         stream: true,
         temperature: options.temperature ?? 0.7,
