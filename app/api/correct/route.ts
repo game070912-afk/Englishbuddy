@@ -4,9 +4,10 @@ import {
   streamTextDeltas,
   type CompletionMessage,
 } from "@/lib/api/ai";
-import { requireUser } from "@/lib/api/auth";
+import { getCurrentUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildCorrectorSystemPrompt } from "@/lib/api/prompts";
+import { assertAnonymousQuota } from "@/lib/api/usage-guard";
 import type {
   CorrectionRequestBody,
   CorrectionStreamEvent,
@@ -22,6 +23,8 @@ export const maxDuration = 60;
 const encoder = new TextEncoder();
 /** 最多重试一次 */
 const MAX_ATTEMPTS = 2;
+/** 匿名访客单次可批改的字符数上限 */
+const ANONYMOUS_TEXT_LIMIT = 600;
 
 /** 把事件序列化为 SSE 格式 */
 function toSseEvent(event: CorrectionStreamEvent): Uint8Array {
@@ -45,9 +48,13 @@ function buildErrorResponse(error: AppError): Response {
  * 响应：text/event-stream，事件结构见 CorrectionStreamEvent
  */
 export async function POST(request: Request): Promise<Response> {
-  // 闸门：接了数据库就要求登录，避免接口被匿名刷爆
+  // 匿名可以试用，但限量；登录用户不受限
+  const user = await getCurrentUser();
+
   try {
-    await requireUser();
+    if (!user) {
+      assertAnonymousQuota(request);
+    }
   } catch (error) {
     return buildErrorResponse(toAppError(error));
   }
@@ -60,7 +67,8 @@ export async function POST(request: Request): Promise<Response> {
     if (typeof body?.text !== "string" || body.text.trim().length === 0) {
       throw new Error("缺少待批改的文本");
     }
-    text = sanitizeUserText(body.text, MAX_MESSAGE_LENGTH);
+    const limit = user ? MAX_MESSAGE_LENGTH : ANONYMOUS_TEXT_LIMIT;
+    text = sanitizeUserText(body.text, limit);
   } catch {
     return buildErrorResponse(new AppError("请求内容格式不正确", "INVALID_REQUEST", 400));
   }

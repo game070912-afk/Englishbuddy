@@ -1,7 +1,8 @@
 import { createChatCompletionStream, streamTextDeltas, type CompletionMessage } from "@/lib/api/ai";
-import { requireUser } from "@/lib/api/auth";
+import { getCurrentUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildTutorSystemPrompt } from "@/lib/api/prompts";
+import { assertAnonymousQuota } from "@/lib/api/usage-guard";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";
 import { parseChatRequestBody } from "@/lib/utils/validate";
 
@@ -10,6 +11,8 @@ export const maxDuration = 60;
 
 /** 事件流的编码工具 */
 const encoder = new TextEncoder();
+/** 匿名访客最多携带的历史消息条数 */
+const ANONYMOUS_HISTORY_LIMIT = 6;
 
 /** 把事件序列化为 SSE 格式 */
 function toSseEvent(event: ChatStreamEvent): Uint8Array {
@@ -33,9 +36,13 @@ function buildErrorResponse(error: AppError): Response {
  * 响应：text/event-stream，事件结构见 ChatStreamEvent
  */
 export async function POST(request: Request): Promise<Response> {
-  // 闸门：接了数据库就要求登录，避免接口被匿名刷爆
+  // 匿名可以试用，但限量；登录用户不受限
+  const user = await getCurrentUser();
+
   try {
-    await requireUser();
+    if (!user) {
+      assertAnonymousQuota(request);
+    }
   } catch (error) {
     return buildErrorResponse(toAppError(error));
   }
@@ -47,6 +54,11 @@ export async function POST(request: Request): Promise<Response> {
     body = parseChatRequestBody(raw);
   } catch {
     return buildErrorResponse(new AppError("请求内容格式不正确", "INVALID_REQUEST", 400));
+  }
+
+  // 匿名访客只带最近 6 条上下文，控制单次调用成本
+  if (!user && body.messages.length > ANONYMOUS_HISTORY_LIMIT) {
+    body = { ...body, messages: body.messages.slice(-ANONYMOUS_HISTORY_LIMIT) };
   }
 
   const messages: CompletionMessage[] = [

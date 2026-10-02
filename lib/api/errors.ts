@@ -3,6 +3,7 @@
 export type AppErrorCode =
   | "INVALID_REQUEST"
   | "UNAUTHORIZED"
+  | "RATE_LIMITED"
   | "AI_NOT_CONFIGURED"
   | "AI_UPSTREAM_ERROR"
   | "AI_STREAM_ERROR"
