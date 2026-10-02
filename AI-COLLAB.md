@@ -50,3 +50,16 @@
 - 顺手修的 bug：`.gitignore` 里 `.env*` 把模板文件 `.env.example` 也忽略了，仓库里根本没有配置模板，而 README 却写着 `cp .env.example .env.local`——加 `!.env.example` 例外并补交模板
 - 我做的决定：默认供应商选免费方案（让克隆仓库的人零成本就能跑）；环境变量从 `DEEPSEEK_*` 迁到 `AI_*`，旧变量名保留兼容
 - 我需要亲自做的：① 注册 <https://open.bigmodel.cn/> 拿免费密钥 ② 填进 `.env.local` 的 `AI_API_KEY` ③ Vercel 上加 `AI_PROVIDER=zhipu` + `AI_API_KEY` 后 Redeploy
+
+## 2026-10-02~03（第五~八次：Supabase 账号体系 + 数据持久化）
+
+- 我下的指令：接 Supabase，做登录和历史保存；中途两次改主意——先在任务栏建任务后又要求移到项目里，最后让我自己决定匿名能不能用
+- AI 产出：`lib/supabase/`（配置/浏览器端/服务端客户端）、`proxy.ts`（Next 16 中间件改名，刷新登录态）、`/login` 与 `AuthForm`、`/history` 与 `POST /api/conversations`、`lib/api/usage-guard.ts`（匿名限流）
+- 我做的决定：**匿名可试用但限量，不强制登录**。理由——招聘方点开链接撞登录墙会直接走人，这是确定的损失；被刷额度只是可能的风险。AI 先做成了强制登录，自己推翻改成了限流
+- 踩过的坑（都记进项目笔记了）：
+  1. `pnpm add` 在这台机器上必崩，改成手改 `package.json` + `pnpm install`
+  2. 沙箱 safe-delete 挡安装，开关是 `CODEBUDDY_SAFE_DELETE_ENABLED=0`
+  3. Next 16 中间件必须叫 `proxy.ts`，写 `middleware.ts` 会静默失效
+  4. Supabase 关闭邮箱验证不追溯老账号；未验证账号登录时报"密码不对"（防用户枚举）
+  5. 用户在找 Confirm email 时误关了 **Enable Signup**，导致之后所有注册被拒——靠"报错兜底显示原文"才定位到
+- 我学到的一件事：**报错信息要能自证**。最后一条坑能定位，全靠之前把 Supabase 原文显示出来；否则我们还在猜密码对不对
