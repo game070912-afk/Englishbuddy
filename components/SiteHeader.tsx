@@ -27,6 +27,11 @@ export default async function SiteHeader() {
           <Link href="/correct" className="transition hover:text-indigo-500">
             语法纠错
           </Link>
+          {email ? (
+            <Link href="/history" className="transition hover:text-indigo-500">
+              历史
+            </Link>
+          ) : null}
           <AuthStatus email={email} configured={configured} />
         </nav>
       </div>

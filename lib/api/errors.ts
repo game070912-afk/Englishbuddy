@@ -2,6 +2,7 @@
 
 export type AppErrorCode =
   | "INVALID_REQUEST"
+  | "UNAUTHORIZED"
   | "AI_NOT_CONFIGURED"
   | "AI_UPSTREAM_ERROR"
   | "AI_STREAM_ERROR"

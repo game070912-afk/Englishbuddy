@@ -1,4 +1,5 @@
 import { createChatCompletionStream, streamTextDeltas, type CompletionMessage } from "@/lib/api/ai";
+import { requireUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildTutorSystemPrompt } from "@/lib/api/prompts";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";
@@ -32,6 +33,13 @@ function buildErrorResponse(error: AppError): Response {
  * 响应：text/event-stream，事件结构见 ChatStreamEvent
  */
 export async function POST(request: Request): Promise<Response> {
+  // 闸门：接了数据库就要求登录，避免接口被匿名刷爆
+  try {
+    await requireUser();
+  } catch (error) {
+    return buildErrorResponse(toAppError(error));
+  }
+
   let body: ChatRequestBody;
 
   try {

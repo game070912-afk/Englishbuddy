@@ -4,6 +4,7 @@ import {
   streamTextDeltas,
   type CompletionMessage,
 } from "@/lib/api/ai";
+import { requireUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildCorrectorSystemPrompt } from "@/lib/api/prompts";
 import type {
@@ -44,6 +45,13 @@ function buildErrorResponse(error: AppError): Response {
  * 响应：text/event-stream，事件结构见 CorrectionStreamEvent
  */
 export async function POST(request: Request): Promise<Response> {
+  // 闸门：接了数据库就要求登录，避免接口被匿名刷爆
+  try {
+    await requireUser();
+  } catch (error) {
+    return buildErrorResponse(toAppError(error));
+  }
+
   let text: string;
 
   try {

@@ -6,6 +6,7 @@ import ChatBubble from "@/components/ChatBubble";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import type { ChatMessage, ChatStreamEvent, EnglishLevel } from "@/lib/types/chat";
+import { createClient } from "@/lib/supabase/client";
 
 /** 难度选项 */
 const LEVEL_OPTIONS: ReadonlyArray<{ value: EnglishLevel; label: string }> = [
@@ -55,10 +56,60 @@ export default function ChatPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  /** 是否已登录；只有登录后才自动保存 */
+  const [signedIn, setSignedIn] = useState(false);
+  /** 当前会话在数据库里的 id，第一次保存后才有 */
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) {
+      return;
+    }
+
+    let active = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) {
+        setSignedIn(Boolean(data.user));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /** 把这一轮对话存下来；失败也不打断聊天 */
+  async function saveConversation(finalMessages: ChatMessage[]): Promise<void> {
+    try {
+      const response = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(conversationId ? { id: conversationId } : {}),
+          topic: topic.trim() || undefined,
+          level,
+          messages: finalMessages,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload: unknown = await response.json().catch(() => null);
+      const id = (payload as { id?: unknown } | null)?.id;
+      if (typeof id === "string" && id) {
+        setConversationId(id);
+      }
+    } catch {
+      // 保存失败静默处理，不影响对话体验
+    }
+  }
 
   async function handleSend(): Promise<void> {
     const content = input.trim();
@@ -99,7 +150,11 @@ export default function ChatPanel() {
       const assistantId = createId();
       setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
-      await readStream(response.body, assistantId);
+      const reply = await readStream(response.body, assistantId);
+
+      if (signedIn && reply.trim()) {
+        void saveConversation([...history, { id: assistantId, role: "assistant", content: reply }]);
+      }
     } catch {
       setError("网络不太稳定，请检查网络后重试");
     } finally {
@@ -107,8 +162,11 @@ export default function ChatPanel() {
     }
   }
 
-  /** 逐段读取 SSE 流并追加到对应消息 */
-  async function readStream(stream: ReadableStream<Uint8Array>, assistantId: string): Promise<void> {
+  /**
+   * 逐段读取 SSE 流并追加到对应消息。
+   * @returns AI 最终回复的完整文本，供保存对话使用
+   */
+  async function readStream(stream: ReadableStream<Uint8Array>, assistantId: string): Promise<string> {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -157,6 +215,7 @@ export default function ChatPanel() {
     }
 
     reader.releaseLock();
+    return accumulated;
   }
 
   return (
