@@ -104,25 +104,40 @@ export async function createChatCompletionStream(
   assertAiConfigured();
   const { baseUrl, apiKey, model } = resolveAiConfig();
 
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model ?? model,
-        messages: options.messages,
-        stream: true,
-        temperature: options.temperature ?? 0.7,
-      }),
-      signal: options.signal,
-    });
-  } catch (error) {
-    console.error("[EnglishBuddy] 调用 AI 接口失败：", error);
-    throw new AppError("网络连接不稳定，请稍后再试", "AI_UPSTREAM_ERROR", 502);
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+  const payload = JSON.stringify({
+    model: options.model ?? model,
+    messages: options.messages,
+    stream: true,
+    temperature: options.temperature ?? 0.7,
+  });
+
+  /** 发一次请求；网络层异常直接转成友好错误 */
+  const send = async (): Promise<Response> => {
+    try {
+      return await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: payload,
+        signal: options.signal,
+      });
+    } catch (error) {
+      console.error("[EnglishBuddy] 调用 AI 接口失败：", error);
+      throw new AppError("网络连接不稳定，请稍后再试", "AI_UPSTREAM_ERROR", 502);
+    }
+  };
+
+  let response = await send();
+
+  // 上游抽风（5xx）或被限流（429）时静默重试一次：
+  // 免费额度下这类抖动很常见，直接把错误抛给用户会让演示翻车
+  if (!response.ok && (response.status === 429 || response.status >= 500)) {
+    console.warn("[EnglishBuddy] 上游异常，重试一次：", response.status);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    response = await send();
   }
 
   if (!response.ok || !response.body) {
