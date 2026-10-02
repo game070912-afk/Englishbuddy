@@ -24,7 +24,17 @@ function translateError(message: string): string {
   if (message.includes("unable to validate email") || message.includes("invalid format")) {
     return "邮箱格式看着不对，检查一下";
   }
-  return "操作没成功，稍后再试试";
+  if (message.includes("Signups not allowed") || message.includes("signups not allowed")) {
+    return "这个项目暂时关闭了新用户注册，需要去 Supabase 控制台打开";
+  }
+  if (message.includes("already been registered") || message.includes("already registered")) {
+    return "这个邮箱已经注册过了，直接登录吧";
+  }
+  if (message.includes("only request this once every")) {
+    return "操作太频繁了，等一分钟再试";
+  }
+  // 兜底：把 Supabase 的原文一起亮出来，方便定位问题
+  return `操作没成功（原因：${message}）`;
 }
 
 /**
