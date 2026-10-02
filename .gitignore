@@ -35,6 +35,9 @@ yarn-error.log*
 # 模板文件要提交，方便别人知道需要配哪些变量（里面不含真实密钥）
 !.env.example
 
+# pnpm 安装中断时会在项目根目录留下临时文件
+_tmp_*
+
 # vercel
 .vercel
 
