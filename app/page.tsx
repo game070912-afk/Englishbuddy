@@ -15,7 +15,7 @@ const FEATURES: ReadonlyArray<{ title: string; description: string; available: b
   {
     title: "词汇卡片",
     description: "结合上下文生成释义与例句，一键收藏成学习卡片。",
-    available: false,
+    available: true,
   },
 ];
 
@@ -39,6 +39,12 @@ export default function Home() {
             className="w-fit rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-500"
           >
             批改一段英文
+          </Link>
+          <Link
+            href="/vocab"
+            className="w-fit rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-500"
+          >
+            查个单词
           </Link>
         </div>
       </section>

@@ -27,6 +27,9 @@ export default async function SiteHeader() {
           <Link href="/correct" className="transition hover:text-indigo-500">
             语法纠错
           </Link>
+          <Link href="/vocab" className="transition hover:text-indigo-500">
+            生词本
+          </Link>
           {email ? (
             <Link href="/history" className="transition hover:text-indigo-500">
               历史
