@@ -25,6 +25,12 @@ const encoder = new TextEncoder();
 const MAX_ATTEMPTS = 2;
 /** 匿名访客单次可批改的字符数上限 */
 const ANONYMOUS_TEXT_LIMIT = 600;
+/**
+ * 批改结果的生成上限。
+ * 输入最多 2000 字符，输出是「改后全文 + 最多 10 条问题」，1600 留了余量；
+ * 主要是防止模型在解释上没完没了。
+ */
+const CORRECTION_MAX_TOKENS = 1600;
 
 /** 把事件序列化为 SSE 格式 */
 function toSseEvent(event: CorrectionStreamEvent): Uint8Array {
@@ -133,6 +139,7 @@ async function streamOneAttempt(
   const upstreamStream = await createChatCompletionStream({
     messages,
     temperature: strict ? 0 : 0.3,
+    maxTokens: CORRECTION_MAX_TOKENS,
   });
 
   let lineBuffer = "";

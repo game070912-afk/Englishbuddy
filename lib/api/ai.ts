@@ -39,6 +39,12 @@ export interface ChatCompletionOptions {
   messages: CompletionMessage[];
   model?: string;
   temperature?: number;
+  /**
+   * 生成长度上限。
+   * 这不是为了省钱，而是为了**响应时间**：免费模型的输出是按 token 一个一个吐的，
+   * 不设上限时它偶尔会啰嗦一大段，用户就得干等。设了上限，最坏情况是可预期的。
+   */
+  maxTokens?: number;
   signal?: AbortSignal;
 }
 
@@ -113,6 +119,7 @@ export async function createChatCompletionStream(
     messages: options.messages,
     stream: true,
     temperature: options.temperature ?? 0.7,
+    ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
   });
 
   /** 发一次请求；网络层异常直接转成友好错误 */

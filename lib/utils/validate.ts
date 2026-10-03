@@ -48,6 +48,37 @@ export function isChatMessage(value: unknown): value is ChatMessage {
 }
 
 /**
+ * 按字符预算裁剪历史消息，只保留最近的内容。
+ *
+ * 只限制「条数」是不够的：20 条长消息能塞进去几万字符，
+ * 输入越长，模型开始吐第一个字之前的等待就越久。
+ * 这里按总字符数兜底，并且**至少保留最后一条**（也就是用户刚发的那句）。
+ */
+export function trimMessagesByBudget<T extends { content: string }>(
+  messages: T[],
+  budgetChars: number,
+): T[] {
+  const kept: T[] = [];
+  let total = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const item = messages[index];
+    if (!item) {
+      continue;
+    }
+
+    total += item.content.length;
+    if (kept.length > 0 && total > budgetChars) {
+      break;
+    }
+
+    kept.unshift(item);
+  }
+
+  return kept;
+}
+
+/**
  * 校验 /api/chat 的请求体。
  * 返回值已做过长度限制与非法字符清洗，可直接安全使用。
  */

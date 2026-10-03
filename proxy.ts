@@ -48,7 +48,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    // 跳过静态资源与图片优化请求，避免无谓的函数调用
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // 跳过接口请求、静态资源与图片优化请求，避免无谓的函数调用。
+    // 跳过 /api 是刻意的性能取舍：接口自己会读登录态，没必要先在这里再查一次数据库，
+    // 省掉这一趟网络往返，AI 回复的首字延迟能明显改善。
+    // 代价是「刷新过期 cookie」只发生在页面导航时——刷新 token 本身仍在服务端照常生效。
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

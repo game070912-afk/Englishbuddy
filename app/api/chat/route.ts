@@ -4,7 +4,7 @@ import { AppError, toAppError } from "@/lib/api/errors";
 import { buildTutorSystemPrompt } from "@/lib/api/prompts";
 import { assertAnonymousQuota } from "@/lib/api/usage-guard";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";
-import { parseChatRequestBody } from "@/lib/utils/validate";
+import { parseChatRequestBody, trimMessagesByBudget } from "@/lib/utils/validate";
 
 /** 部署到 Vercel 时允许的最长执行时间（流式回复需要） */
 export const maxDuration = 60;
@@ -13,6 +13,14 @@ export const maxDuration = 60;
 const encoder = new TextEncoder();
 /** 匿名访客最多携带的历史消息条数 */
 const ANONYMOUS_HISTORY_LIMIT = 6;
+/** 历史消息的总字符预算：超出就从最旧的开始丢，保证输入不会越聊越胖 */
+const HISTORY_CHAR_BUDGET = 4000;
+/**
+ * 单次回复的生成上限。
+ * 外教被要求每次只说 2-4 句（约 100 token），给 320 留足余量；
+ * 真正起的作用是防止模型偶尔发疯写长文，让用户干等十几秒。
+ */
+const REPLY_MAX_TOKENS = 320;
 
 /** 把事件序列化为 SSE 格式 */
 function toSseEvent(event: ChatStreamEvent): Uint8Array {
@@ -61,13 +69,19 @@ export async function POST(request: Request): Promise<Response> {
     body = { ...body, messages: body.messages.slice(-ANONYMOUS_HISTORY_LIMIT) };
   }
 
+  // 再按字符数兜一道：输入越短，模型吐第一个字之前的等待越短
+  body = { ...body, messages: trimMessagesByBudget(body.messages, HISTORY_CHAR_BUDGET) };
+
   const messages: CompletionMessage[] = [
     { role: "system", content: buildTutorSystemPrompt(body.topic, body.level) },
     ...body.messages.map((item) => ({ role: item.role, content: item.content })),
   ];
 
   try {
-    const upstreamStream = await createChatCompletionStream({ messages });
+    const upstreamStream = await createChatCompletionStream({
+      messages,
+      maxTokens: REPLY_MAX_TOKENS,
+    });
 
     const outputStream = new ReadableStream<Uint8Array>({
       async start(controller) {

@@ -82,6 +82,21 @@ describe("POST /api/chat", () => {
     expect(text).toContain('"type":"done"');
   });
 
+  it("给上游的请求里带上了生成长度上限，避免模型啰嗦拖慢回复", async () => {
+    // 拦下真正发出去的请求体，确认长度上限没有漏掉
+    let sentBody: BodyInit | null | undefined;
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      sentBody = init?.body;
+      return new Response(createFakeUpstreamStream(["Hi"]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await POST(createRequest({ messages: [{ id: "1", role: "user", content: "hi" }] }));
+
+    const body = JSON.parse(String(sentBody)) as { max_tokens?: number };
+    expect(body.max_tokens).toBeGreaterThan(0);
+  });
+
   it("上游接口异常时返回友好提示而不是原始响应", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
 
