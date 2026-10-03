@@ -148,3 +148,67 @@ describe("createChatCompletionStream 的 thinking 参数处理", () => {
     expect(second.thinking).toBeUndefined();
   });
 });
+
+describe("备用供应商自动切换", () => {
+  const FALLBACK_KEYS = ["AI_FALLBACK_BASE_URL", "AI_FALLBACK_API_KEY", "AI_FALLBACK_MODEL"];
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.AI_API_KEY;
+    delete process.env.AI_PROVIDER;
+    for (const key of FALLBACK_KEYS) {
+      delete process.env[key];
+    }
+  });
+
+  it("主供应商彻底失败时自动切到备用", async () => {
+    process.env.AI_API_KEY = "test-key";
+    process.env.AI_FALLBACK_BASE_URL = "https://fallback.example.com/v1";
+    process.env.AI_FALLBACK_API_KEY = "fallback-key";
+    process.env.AI_FALLBACK_MODEL = "backup-model";
+
+    const urls: string[] = [];
+    const fetchMock = vi.fn(async (url: unknown) => {
+      const target = String(url);
+      urls.push(target);
+      // 主供应商一直失败（含重试），备用成功
+      return target.startsWith("https://fallback.example.com")
+        ? new Response(createFakeUpstreamStream())
+        : new Response("boom", { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stream = await createChatCompletionStream({
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stream).toBeInstanceOf(ReadableStream);
+    expect(urls.some((item) => item.startsWith("https://fallback.example.com"))).toBe(true);
+  });
+
+  it("没配备用时主供应商失败就直接报错", async () => {
+    process.env.AI_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("boom", { status: 500 })),
+    );
+
+    await expect(
+      createChatCompletionStream({ messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toThrow("AI 服务暂时不可用");
+  });
+
+  it("备用配置只填一半时视为没配，不会发到错误地址", async () => {
+    process.env.AI_API_KEY = "test-key";
+    process.env.AI_FALLBACK_BASE_URL = "https://fallback.example.com/v1";
+    // 故意漏掉 key 和 model
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("boom", { status: 500 })),
+    );
+
+    await expect(
+      createChatCompletionStream({ messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toThrow("AI 服务暂时不可用");
+  });
+});

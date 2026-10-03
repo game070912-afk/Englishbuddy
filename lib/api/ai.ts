@@ -100,45 +100,69 @@ export function assertAiConfigured(): void {
   }
 }
 
-/**
- * 调用 OpenAI 兼容的聊天接口并以流的形式返回原始响应体。
- * 密钥只在本模块（服务端）读取，绝不出现在客户端代码中。
- */
-export async function createChatCompletionStream(
-  options: ChatCompletionOptions,
-): Promise<ReadableStream<Uint8Array>> {
-  assertAiConfigured();
-  const { baseUrl, apiKey, model, provider } = resolveAiConfig();
+/** 一个可用的上游端点：地址 + 密钥 + 模型 */
+interface Endpoint {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
+/**
+ * 解析备用供应商配置。
+ * 三条都填了才算启用，避免只填一半时静默发到错误的地址。
+ */
+export function resolveFallbackConfig(): Endpoint | null {
+  const baseUrl = process.env.AI_FALLBACK_BASE_URL?.trim();
+  const apiKey = process.env.AI_FALLBACK_API_KEY?.trim();
+  const model = process.env.AI_FALLBACK_MODEL?.trim();
+
+  if (!baseUrl || !apiKey || !model) {
+    return null;
+  }
+
+  return { baseUrl, apiKey, model };
+}
+
+/**
+ * 向一个端点发起请求，内部处理两类重试：
+ *
+ * 1. 429 / 5xx：上游抽风或被限流，等 800ms 重试一次
+ * 2. 400 且请求里带了 thinking：上游不认识这个参数，去掉后再试一次
+ *
+ * 网络层异常直接转成中文错误抛出，不在这里兜底。
+ */
+async function sendWithRetry(
+  endpoint: Endpoint,
+  options: ChatCompletionOptions,
+  disableThinking: boolean,
+): Promise<Response> {
   /**
    * 智谱 GLM-4.5 起是「混合推理」模型，默认会先内部思考再回答。
    * 思考 token 有两个坏处：拖慢首字延迟；更糟的是如果 max_tokens 给小了，
    * 额度全被思考吃掉，模型一个可见字都吐不出来（表现为 200 但内容为空）。
    * 陪练场景不需要思考，所以智谱供应商下明确关掉。
-   * 万一哪天参数不被上游接受（400），下面有去掉参数重试的兜底。
    */
-  const buildPayload = (disableThinking: boolean): string =>
+  const buildPayload = (thinking: boolean): string =>
     JSON.stringify({
-      model: options.model ?? model,
+      model: options.model ?? endpoint.model,
       messages: options.messages,
       stream: true,
       temperature: options.temperature ?? 0.7,
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-      ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
+      ...(thinking ? { thinking: { type: "disabled" } } : {}),
     });
 
-  let disableThinking = provider === "zhipu";
-  let payload = buildPayload(disableThinking);
+  let thinking = disableThinking;
+  let payload = buildPayload(thinking);
 
   const headers = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
+    Authorization: `Bearer ${endpoint.apiKey}`,
   };
 
-  /** 发一次请求；网络层异常直接转成友好错误 */
   const send = async (): Promise<Response> => {
     try {
-      return await fetch(`${baseUrl}/chat/completions`, {
+      return await fetch(`${endpoint.baseUrl}/chat/completions`, {
         method: "POST",
         headers,
         body: payload,
@@ -152,8 +176,7 @@ export async function createChatCompletionStream(
 
   let response = await send();
 
-  // 上游抽风（5xx）或被限流（429）时静默重试一次：
-  // 免费额度下这类抖动很常见，直接把错误抛给用户会让演示翻车
+  // 上游抽风（5xx）或被限流（429）时静默重试一次
   if (!response.ok && (response.status === 429 || response.status >= 500)) {
     console.warn("[EnglishBuddy] 上游异常，重试一次：", response.status);
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -161,14 +184,44 @@ export async function createChatCompletionStream(
   }
 
   // 上游不认识 thinking 参数时，去掉它再试一次，保证换模型也不会挂
-  if (!response.ok && response.status === 400 && disableThinking) {
+  if (!response.ok && response.status === 400 && thinking) {
     console.warn("[EnglishBuddy] 上游不支持 thinking 参数，去掉后重试");
-    disableThinking = false;
+    thinking = false;
     payload = buildPayload(false);
     response = await send();
   }
 
+  return response;
+}
+
+/**
+ * 调用 OpenAI 兼容的聊天接口并以流的形式返回原始响应体。
+ * 密钥只在本模块（服务端）读取，绝不出现在客户端代码中。
+ *
+ * 主供应商扛不住时自动切备用（`AI_FALLBACK_*` 三条都配了才启用）。
+ * 免费额度本来就会一阵一阵地抽风，靠单点硬扛，演示时翻车是迟早的事。
+ */
+export async function createChatCompletionStream(
+  options: ChatCompletionOptions,
+): Promise<ReadableStream<Uint8Array>> {
+  assertAiConfigured();
+  const { baseUrl, apiKey, model, provider } = resolveAiConfig();
+  const fallback = resolveFallbackConfig();
+
+  let response = await sendWithRetry({ baseUrl, apiKey, model }, options, provider === "zhipu");
+
   if (!response.ok || !response.body) {
+    if (fallback) {
+      console.warn(`[EnglishBuddy] 主供应商返回 ${response.status}，改用备用供应商`);
+      // 备用是哪家不确定，所以不带任何厂商特有参数
+      const fallbackResponse = await sendWithRetry(fallback, options, false);
+
+      if (fallbackResponse.ok && fallbackResponse.body) {
+        return fallbackResponse.body;
+      }
+      response = fallbackResponse;
+    }
+
     console.error("[EnglishBuddy] AI 接口返回异常状态：", response.status);
     throw new AppError("AI 服务暂时不可用，请稍后再试", "AI_UPSTREAM_ERROR", 502);
   }
