@@ -108,19 +108,32 @@ export async function createChatCompletionStream(
   options: ChatCompletionOptions,
 ): Promise<ReadableStream<Uint8Array>> {
   assertAiConfigured();
-  const { baseUrl, apiKey, model } = resolveAiConfig();
+  const { baseUrl, apiKey, model, provider } = resolveAiConfig();
+
+  /**
+   * 智谱 GLM-4.5 起是「混合推理」模型，默认会先内部思考再回答。
+   * 思考 token 有两个坏处：拖慢首字延迟；更糟的是如果 max_tokens 给小了，
+   * 额度全被思考吃掉，模型一个可见字都吐不出来（表现为 200 但内容为空）。
+   * 陪练场景不需要思考，所以智谱供应商下明确关掉。
+   * 万一哪天参数不被上游接受（400），下面有去掉参数重试的兜底。
+   */
+  const buildPayload = (disableThinking: boolean): string =>
+    JSON.stringify({
+      model: options.model ?? model,
+      messages: options.messages,
+      stream: true,
+      temperature: options.temperature ?? 0.7,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      ...(disableThinking ? { thinking: { type: "disabled" } } : {}),
+    });
+
+  let disableThinking = provider === "zhipu";
+  let payload = buildPayload(disableThinking);
 
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
-  const payload = JSON.stringify({
-    model: options.model ?? model,
-    messages: options.messages,
-    stream: true,
-    temperature: options.temperature ?? 0.7,
-    ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-  });
 
   /** 发一次请求；网络层异常直接转成友好错误 */
   const send = async (): Promise<Response> => {
@@ -144,6 +157,14 @@ export async function createChatCompletionStream(
   if (!response.ok && (response.status === 429 || response.status >= 500)) {
     console.warn("[EnglishBuddy] 上游异常，重试一次：", response.status);
     await new Promise((resolve) => setTimeout(resolve, 800));
+    response = await send();
+  }
+
+  // 上游不认识 thinking 参数时，去掉它再试一次，保证换模型也不会挂
+  if (!response.ok && response.status === 400 && disableThinking) {
+    console.warn("[EnglishBuddy] 上游不支持 thinking 参数，去掉后重试");
+    disableThinking = false;
+    payload = buildPayload(false);
     response = await send();
   }
 

@@ -17,10 +17,11 @@ const ANONYMOUS_HISTORY_LIMIT = 6;
 const HISTORY_CHAR_BUDGET = 4000;
 /**
  * 单次回复的生成上限。
- * 外教被要求每次只说 2-4 句（约 100 token），给 320 留足余量；
- * 真正起的作用是防止模型偶尔发疯写长文，让用户干等十几秒。
+ * 注意不能给太小：万一「关闭思考」的参数没生效，模型会先思考再回答，
+ * 上限太小会把额度全喂给思考过程，用户收到一个字都没有的空回复。
+ * 2048 能兜住「思考 + 回答」的最坏情况；正常关掉思考后远用不满。
  */
-const REPLY_MAX_TOKENS = 320;
+const REPLY_MAX_TOKENS = 2048;
 
 /** 把事件序列化为 SSE 格式 */
 function toSseEvent(event: ChatStreamEvent): Uint8Array {
@@ -86,10 +87,22 @@ export async function POST(request: Request): Promise<Response> {
     const outputStream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
+          let emitted = 0;
           for await (const text of streamTextDeltas(upstreamStream)) {
+            emitted += 1;
             controller.enqueue(toSseEvent({ type: "delta", text }));
           }
-          controller.enqueue(toSseEvent({ type: "done", reason: "stop" }));
+
+          if (emitted === 0) {
+            // 上游返回 200 但一个字都没吐：与其让用户盯着空气，
+            // 不如明说「这次没生成出来」，引导他再发一次
+            console.warn("[EnglishBuddy] 上游返回了空回复");
+            controller.enqueue(
+              toSseEvent({ type: "error", message: "AI 这次没说话，请再发一次试试" }),
+            );
+          } else {
+            controller.enqueue(toSseEvent({ type: "done", reason: "stop" }));
+          }
         } catch (error) {
           const appError = toAppError(error);
           controller.enqueue(toSseEvent({ type: "error", message: appError.userMessage }));

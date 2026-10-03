@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resolveAiConfig } from "@/lib/api/ai";
+import { createChatCompletionStream, resolveAiConfig } from "@/lib/api/ai";
 
 /** 需要清理的环境变量，避免用例之间互相污染 */
 const MANAGED_KEYS = [
@@ -68,5 +68,83 @@ describe("resolveAiConfig", () => {
     process.env.AI_PROVIDER = "not-a-provider";
 
     expect(resolveAiConfig().provider).toBe("zhipu");
+  });
+});
+
+/** 构造一段模拟的上游 SSE 响应体 */
+function createFakeUpstreamStream(): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      const payload = JSON.stringify({ choices: [{ delta: { content: "Hi" } }] });
+      controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
+
+describe("createChatCompletionStream 的 thinking 参数处理", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.AI_API_KEY;
+    delete process.env.AI_PROVIDER;
+  });
+
+  it("智谱供应商下会关闭思考，避免思考吃光 token 额度", async () => {
+    process.env.AI_API_KEY = "test-key";
+    let sentBody = "";
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      sentBody = String(init?.body);
+      return new Response(createFakeUpstreamStream());
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createChatCompletionStream({ messages: [{ role: "user", content: "hi" }] });
+
+    const body = JSON.parse(sentBody) as { thinking?: { type?: string } };
+    expect(body.thinking?.type).toBe("disabled");
+  });
+
+  it("其他供应商不带 thinking 参数", async () => {
+    process.env.AI_API_KEY = "test-key";
+    process.env.AI_PROVIDER = "deepseek";
+    let sentBody = "";
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      sentBody = String(init?.body);
+      return new Response(createFakeUpstreamStream());
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createChatCompletionStream({ messages: [{ role: "user", content: "hi" }] });
+
+    const body = JSON.parse(sentBody) as { thinking?: unknown };
+    expect(body.thinking).toBeUndefined();
+  });
+
+  it("上游不认识 thinking 参数（400）时自动去掉重试", async () => {
+    process.env.AI_API_KEY = "test-key";
+    const bodies: string[] = [];
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const raw = String(init?.body);
+      if (bodies.length === 0) {
+        bodies.push(raw);
+        return new Response("bad request", { status: 400 });
+      }
+      bodies.push(raw);
+      return new Response(createFakeUpstreamStream());
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stream = await createChatCompletionStream({
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(stream).toBeInstanceOf(ReadableStream);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = JSON.parse(bodies[0] ?? "{}") as { thinking?: unknown };
+    const second = JSON.parse(bodies[1] ?? "{}") as { thinking?: unknown };
+    expect(first.thinking).toBeDefined();
+    expect(second.thinking).toBeUndefined();
   });
 });

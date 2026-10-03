@@ -97,6 +97,22 @@ describe("POST /api/chat", () => {
     expect(body.max_tokens).toBeGreaterThan(0);
   });
 
+  it("上游一个字都没吐时给出明确提示，而不是静默结束", async () => {
+    // 空流：只有结束标记，没有任何增量内容
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(createFakeUpstreamStream([]))),
+    );
+
+    const response = await POST(
+      createRequest({ messages: [{ id: "1", role: "user", content: "hi" }] }),
+    );
+
+    const text = await response.text();
+    expect(text).toContain('"type":"error"');
+    expect(text).toContain("再发一次");
+  });
+
   it("上游接口异常时返回友好提示而不是原始响应", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
 

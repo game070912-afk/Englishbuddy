@@ -29,8 +29,8 @@ const MAX_CONTEXT_LENGTH = 300;
 const LIST_LIMIT = 100;
 /** 最多重试一次 */
 const MAX_ATTEMPTS = 2;
-/** 卡片很短，卡住上限能明显缩短等待；给 400 是因为模型偶尔会先解释再给 JSON */
-const CARD_MAX_TOKENS = 400;
+/** 卡片不长，但上限给足余量：模型若先思考再输出，小的上限会导致空回复解析失败 */
+const CARD_MAX_TOKENS = 1024;
 
 /** 构造统一的错误响应 */
 function buildErrorResponse(error: AppError): Response {
