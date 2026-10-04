@@ -1,0 +1,100 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  MAX_AUDIO_BYTES,
+  MAX_AUDIO_SECONDS,
+  TARGET_SAMPLE_RATE,
+  base64ByteLength,
+  encodeWavPcm16,
+  isBase64,
+  toBase64,
+} from "@/lib/utils/audio";
+
+/** 读 WAV 头的便捷函数 */
+function readWavHeader(buffer: ArrayBuffer): DataView {
+  return new DataView(buffer);
+}
+
+/** 取 WAV 里的 PCM16 采样值 */
+function readSample(buffer: ArrayBuffer, index: number): number {
+  return new DataView(buffer).getInt16(44 + index * 2, true);
+}
+
+describe("encodeWavPcm16", () => {
+  it("写出正确的 WAV 头：单声道 / 16bit / 指定采样率", () => {
+    const samples = new Float32Array([0, 0.5, -0.5]);
+    const buffer = encodeWavPcm16(samples, 16000);
+    const view = readWavHeader(buffer);
+
+    // RIFF / WAVE 标识
+    expect(String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3))).toBe("RIFF");
+    expect(String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11))).toBe("WAVE");
+
+    expect(view.getUint16(22, true)).toBe(1); // 声道数
+    expect(view.getUint32(24, true)).toBe(16000); // 采样率
+    expect(view.getUint16(34, true)).toBe(16); // 位深
+  });
+
+  it("总长度等于 44 字节头 + 采样数 × 2", () => {
+    const samples = new Float32Array(100);
+    expect(encodeWavPcm16(samples, 16000).byteLength).toBe(44 + 200);
+  });
+
+  it("把浮点采样映射到 PCM16 的取值区间", () => {
+    const samples = new Float32Array([0, 1, -1]);
+    const buffer = encodeWavPcm16(samples, 16000);
+
+    expect(readSample(buffer, 0)).toBe(0);
+    expect(readSample(buffer, 1)).toBe(32767);
+    expect(readSample(buffer, 2)).toBe(-32768);
+  });
+
+  it("超出 ±1 的采样会被截断，不会溢出", () => {
+    const samples = new Float32Array([2, -2]);
+    const buffer = encodeWavPcm16(samples, 16000);
+
+    expect(readSample(buffer, 0)).toBe(32767);
+    expect(readSample(buffer, 1)).toBe(-32768);
+  });
+});
+
+describe("toBase64", () => {
+  it("编码后能被 atob 原样还原", () => {
+    const bytes = new Uint8Array([0, 1, 2, 250, 255]);
+    const encoded = toBase64(bytes.buffer);
+    const decoded = atob(encoded);
+
+    expect(decoded.length).toBe(bytes.length);
+    for (let index = 0; index < bytes.length; index += 1) {
+      expect(decoded.charCodeAt(index)).toBe(bytes[index]);
+    }
+  });
+
+  it("空输入得到空字符串", () => {
+    expect(toBase64(new ArrayBuffer(0))).toBe("");
+  });
+});
+
+describe("base64ByteLength", () => {
+  it("按填充符正确换算字节数", () => {
+    expect(base64ByteLength("")).toBe(0);
+    expect(base64ByteLength("AAQC")).toBe(3);
+    expect(base64ByteLength("AAA=")).toBe(2);
+    expect(base64ByteLength("AA==")).toBe(1);
+  });
+
+  it("换算结果与 60 秒音频的上限一致", () => {
+    // 60 秒 × 16000Hz × 2 字节
+    expect(MAX_AUDIO_BYTES).toBe(16000 * 2 * MAX_AUDIO_SECONDS);
+    expect(TARGET_SAMPLE_RATE).toBe(16000);
+  });
+});
+
+describe("isBase64", () => {
+  it("只接受 base64 字符与填充符", () => {
+    expect(isBase64("AAQC")).toBe(true);
+    expect(isBase64("AAA=")).toBe(true);
+    expect(isBase64("hello world!")).toBe(false);
+    expect(isBase64("abc@123")).toBe(false);
+  });
+});

@@ -47,8 +47,10 @@ function createId(): string {
 
 /**
  * 对话主面板：负责消息状态、流式接收 AI 回复与错误处理。
+ *
+ * @param voiceEnabled 服务端是否配好了语音识别；没配就不显示麦克风按钮
  */
-export default function ChatPanel() {
+export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [topic, setTopic] = useState("");
@@ -111,6 +113,15 @@ export default function ChatPanel() {
     }
   }
 
+  /**
+   * 语音识别的结果回填到输入框，而不是直接发出去。
+   * 转写难免有错，让用户先看一眼、改完再发送。
+   */
+  function handleTranscribed(text: string): void {
+    setError(null);
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+  }
+
   async function handleSend(): Promise<void> {
     const content = input.trim();
     if (!content || isLoading) {
@@ -139,11 +150,16 @@ export default function ChatPanel() {
       if (!response.ok) {
         const payload: unknown = await response.json().catch(() => null);
         setError(extractErrorMessage(payload));
+        // 这一句没发出去：撤回气泡并把原文还回输入框，别让用户白打一遍
+        setMessages(messages);
+        setInput(content);
         return;
       }
 
       if (!response.body) {
         setError("没有收到 AI 的回复，请再试一次");
+        setMessages(messages);
+        setInput(content);
         return;
       }
 
@@ -157,6 +173,8 @@ export default function ChatPanel() {
       }
     } catch {
       setError("网络不太稳定，请检查网络后重试");
+      setMessages(messages);
+      setInput(content);
     } finally {
       setIsLoading(false);
     }
@@ -272,7 +290,14 @@ export default function ChatPanel() {
         </div>
       </div>
 
-      <ChatInput value={input} onChange={setInput} onSend={handleSend} disabled={isLoading} />
+      <ChatInput
+        value={input}
+        onChange={setInput}
+        onSend={handleSend}
+        disabled={isLoading}
+        onTranscribed={voiceEnabled ? handleTranscribed : undefined}
+        onVoiceError={setError}
+      />
     </div>
   );
 }

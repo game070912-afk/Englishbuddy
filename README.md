@@ -18,6 +18,9 @@
 | 邮箱注册与登录 | ✅ 可用 | Supabase Auth，会话通过 `proxy.ts` 自动刷新 |
 | 对话历史保存 | ✅ 可用 | 登录后自动存档，换设备也能接着看（RLS 保证只看到自己的） |
 | 词汇查询与生词本 | ✅ 可用 | 结合上下文生成音标/释义/例句，登录后可收藏成卡片随时复习 |
+| 语音输入 | ✅ 可用（需配置） | 对话页按住麦克风说英语，松手转成文字回填输入框，改完再发送 |
+
+> 语音输入需要额外填百度语音的两条 Key（个人认证后有 3 万次免费额度）。不填也不影响其它功能，只是对话页不会出现麦克风按钮。详见 [docs/deploy.md](./docs/deploy.md)。
 
 **不用注册也能直接用**：匿名访客可以试试对话、纠错和查词，每 IP 10 分钟 20 次、对话上下文 6 条；登录后解锁完整额度、历史保存与生词本收藏。
 
@@ -27,6 +30,7 @@
 - Tailwind CSS 4
 - Supabase（已接入：邮箱登录 + Postgres + 行级安全策略 RLS）
 - AI 供应商可插拔：默认智谱 GLM-4.7-Flash（**免费**），可一键切换 DeepSeek 或任意 OpenAI 兼容服务
+- 语音转写：百度短语音识别（英文），同样收在 `lib/api/` 单处，换供应商只改一个文件
 
 ## 本地开发
 
@@ -114,9 +118,40 @@ data: {"type":"done"}
 
 模型输出完全无法解析时会自动重试一次，仍失败则推送 `{"type":"error","message":"..."}`。
 
+### `POST /api/transcribe`
+
+语音转写接口。浏览器无法跨域直连百度的语音服务，所以录音经由本接口转发，密钥只在服务端读取。
+
+请求体：
+
+```json
+{ "audio": "<base64 的 WAV：16kHz / 16bit / 单声道>" }
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| audio | string | 是 | WAV 音频的 base64，≤60 秒 |
+
+成功响应：
+
+```json
+{ "text": "I want to practice my English." }
+```
+
+失败响应：
+
+```json
+{ "error": { "message": "没听清，请再说一次", "code": "ASR_UPSTREAM_ERROR" } }
+```
+
+错误码：`INVALID_REQUEST` / `ASR_NOT_CONFIGURED` / `ASR_UPSTREAM_ERROR` / `RATE_LIMITED` / `INTERNAL_ERROR`
+
+> 音频转码在浏览器端完成：`MediaRecorder` 录下的 webm/opus 经 Web Audio 解码后重采样成 16kHz 单声道，
+> 再编码成 WAV 上传。服务端只在内存里转发，**不落盘、不入库**。
+
 ## 部署
 
-Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
+Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`；要语音输入再加 `BAIDU_ASR_API_KEY` 与 `BAIDU_ASR_SECRET_KEY`。**改完环境变量记得 Redeploy**，否则不生效。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
 
 ## 架构决策
 

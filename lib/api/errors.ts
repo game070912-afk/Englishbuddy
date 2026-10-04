@@ -6,7 +6,10 @@ export type AppErrorCode =
   | "RATE_LIMITED"
   | "AI_NOT_CONFIGURED"
   | "AI_UPSTREAM_ERROR"
+  | "AI_RATE_LIMITED"
   | "AI_STREAM_ERROR"
+  | "ASR_NOT_CONFIGURED"
+  | "ASR_UPSTREAM_ERROR"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

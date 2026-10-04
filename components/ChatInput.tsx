@@ -2,6 +2,8 @@
 
 import { MAX_MESSAGE_LENGTH } from "@/lib/utils/validate";
 
+import VoiceInputButton from "@/components/VoiceInputButton";
+
 interface ChatInputProps {
   /** 当前输入内容 */
   value: string;
@@ -11,12 +13,24 @@ interface ChatInputProps {
   onSend: () => void;
   /** 是否处于加载中（禁用输入） */
   disabled: boolean;
+  /** 语音识别到文字后的回填回调；不传就不显示麦克风按钮 */
+  onTranscribed?: (text: string) => void;
+  /** 语音出错时的提示回调，复用页面已有的错误条 */
+  onVoiceError?: (message: string) => void;
 }
 
 /**
  * 对话输入框：Enter 发送、Shift+Enter 换行，超出长度时提示。
+ * 传了 onTranscribed 才出现麦克风按钮——不支持录音的环境由按钮自己隐藏。
  */
-export default function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps) {
+export default function ChatInput({
+  value,
+  onChange,
+  onSend,
+  disabled,
+  onTranscribed,
+  onVoiceError,
+}: ChatInputProps) {
   const isOverLimit = value.length > MAX_MESSAGE_LENGTH;
   const canSend = value.trim().length > 0 && !disabled && !isOverLimit;
 
@@ -38,6 +52,13 @@ export default function ChatInput({ value, onChange, onSend, disabled }: ChatInp
           </p>
         ) : null}
         <div className="flex items-end gap-2">
+          {onTranscribed ? (
+            <VoiceInputButton
+              onTranscribed={onTranscribed}
+              onError={onVoiceError}
+              disabled={disabled}
+            />
+          ) : null}
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}

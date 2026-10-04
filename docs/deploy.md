@@ -12,8 +12,13 @@
    | --- | --- | --- |
    | `AI_PROVIDER` | `zhipu` | 选填，默认已是 zhipu |
    | `AI_API_KEY` | 你的 AI 密钥 | 必填，服务端专用 |
+   | `BAIDU_ASR_API_KEY` | 百度语音识别 Key | 选填，不填就没有语音输入 |
+   | `BAIDU_ASR_SECRET_KEY` | 百度语音识别 Secret | 选填，同上 |
 
    还没有密钥？先看 [free-ai-api.md](./free-ai-api.md)，智谱 GLM-4.7-Flash **完全免费**，手机号注册即可，3 分钟搞定。
+   语音输入走百度短语音识别（英文），个人认证后有 3 万次免费调用额度，在
+   <https://console.bce.baidu.com/ai/#/ai/speech/overview/index> 创建应用即可拿到两条 Key。
+   **两条都不填也不会报错**，只是对话页不会出现麦克风按钮。
 
 4. 点击 **Deploy**，等 1–2 分钟拿到线上域名
 5. 打开域名验证：`/` 首页、`/chat` 对话、`/correct` 批改
