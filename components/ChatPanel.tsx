@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import ChatBubble from "@/components/ChatBubble";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import type { ChatMessage, ChatStreamEvent, EnglishLevel } from "@/lib/types/chat";
 import { createClient } from "@/lib/supabase/client";
+import { readChatDraft, writeChatDraft } from "@/lib/utils/chat-draft";
 
 /** 难度选项 */
 const LEVEL_OPTIONS: ReadonlyArray<{ value: EnglishLevel; label: string }> = [
@@ -46,26 +47,76 @@ function createId(): string {
 }
 
 /**
+ * 是否已经完成客户端水合。
+ *
+ * 服务端渲染时页面上还什么都没有，而客户端一恢复草稿就有内容了，
+ * 直接渲染会让两边 HTML 对不上（hydration 不一致）。所以先用服务端口径渲染，
+ * 水合完成后再切到真实内容——整个过程只有一帧，肉眼看不出来。
+ *
+ * 用 `useSyncExternalStore` 而不是「useEffect 里 setState」，是因为后者属于
+ * 级联渲染（ESLint 直接报错），而前者本来就是为「服务端快照 vs 客户端快照」
+ * 这种场景设计的。
+ */
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+function getClientSnapshot(): boolean {
+  return true;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+/**
  * 对话主面板：负责消息状态、流式接收 AI 回复与错误处理。
+ *
+ * 状态分成两层：
+ * - 对话内容（messages / topic / level / 输入框）会暂存到 sessionStorage，
+ *   这样在 /chat 与 /history 之间来回跳、或者刷新页面，内容都还在；
+ * - 一次性的界面状态（是否在加载、报错提示）不暂存，回到页面就是干净的状态。
  *
  * @param voiceEnabled 服务端是否配好了语音识别；没配就不显示麦克风按钮
  */
 export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boolean }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [topic, setTopic] = useState("");
-  const [level, setLevel] = useState<EnglishLevel>("intermediate");
+  const hydrated = useSyncExternalStore(subscribeToNothing, getClientSnapshot, getServerSnapshot);
+
+  /**
+   * 首次渲染时读一次本地草稿，作为下面各状态的初始值。
+   * 用 useState 惰性初始化而不是 useRef，是因为在渲染期间读写 ref
+   * 会被 ESLint 的 react-hooks/refs 拦下来。
+   */
+  const [draft] = useState(readChatDraft);
+
+  const [messages, setMessages] = useState<ChatMessage[]>(draft.messages);
+  const [input, setInput] = useState(draft.input);
+  const [topic, setTopic] = useState(draft.topic);
+  const [level, setLevel] = useState<EnglishLevel>(draft.level);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   /** 是否已登录；只有登录后才自动保存 */
   const [signedIn, setSignedIn] = useState(false);
   /** 当前会话在数据库里的 id，第一次保存后才有 */
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(draft.conversationId);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  /**
+   * 把对话内容暂存到本地，这样切到别的页面再回来内容还在。
+   *
+   * 流式回复期间先不写：AI 是一个字一个字吐的，每个字都序列化一遍整段对话
+   * 太浪费，等这一轮结束（isLoading 变回 false）再存一次就够了。
+   */
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+    writeChatDraft({ messages, input, topic, level, conversationId });
+  }, [messages, input, topic, level, conversationId, isLoading]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -243,7 +294,7 @@ export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boo
           <label className="flex items-center gap-2 text-sm text-slate-600">
             话题
             <input
-              value={topic}
+              value={hydrated ? topic : ""}
               onChange={(event) => setTopic(event.target.value)}
               placeholder="如：面试、旅行"
               className="w-40 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-indigo-500"
@@ -252,7 +303,7 @@ export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boo
           <label className="flex items-center gap-2 text-sm text-slate-600">
             难度
             <select
-              value={level}
+              value={hydrated ? level : "intermediate"}
               onChange={(event) => setLevel(event.target.value as EnglishLevel)}
               className="rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-indigo-500"
             >
@@ -268,19 +319,24 @@ export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boo
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {messages.length === 0 ? (
+          {/* 水合完成前一律按「空对话」渲染，才能和服务端的 HTML 对上 */}
+          {!hydrated || messages.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
               设定一个话题，直接用英语打招呼就能开始练习 ✨
             </p>
           ) : null}
 
-          {messages.map((message) => (
-            <ChatBubble key={message.id} role={message.role} content={message.content} />
-          ))}
+          {hydrated
+            ? messages.map((message) => (
+                <ChatBubble key={message.id} role={message.role} content={message.content} />
+              ))
+            : null}
 
-          {isLoading && messages[messages.length - 1]?.content === "" ? <TypingIndicator /> : null}
+          {hydrated && isLoading && messages[messages.length - 1]?.content === "" ? (
+            <TypingIndicator />
+          ) : null}
 
-          {error ? (
+          {hydrated && error ? (
             <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600" role="alert">
               {error}
             </p>
@@ -291,7 +347,7 @@ export default function ChatPanel({ voiceEnabled = false }: { voiceEnabled?: boo
       </div>
 
       <ChatInput
-        value={input}
+        value={hydrated ? input : ""}
         onChange={setInput}
         onSend={handleSend}
         disabled={isLoading}
