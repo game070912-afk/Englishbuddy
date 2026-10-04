@@ -124,9 +124,44 @@ export function resolveFallbackConfig(): Endpoint | null {
 }
 
 /**
+ * 遇到限流（429）或上游抽风（5xx）时的退避等待（毫秒），逐次拉长。
+ *
+ * 实测智谱免费档的 429 是「一阵一阵」的：刚被限流时立刻重试基本还是 429，
+ * 等一两秒再打往往就成了。原来固定等 800ms 只重试一次，等于没重试，
+ * 用户看到的就是一句「AI 服务暂时不可用」——像是坏了，其实只是太急。
+ */
+const RETRY_BACKOFF_MS = [1200, 3000];
+
+/** 单次退避的上限：宁可失败也别让用户对着转圈干等十来秒 */
+const MAX_BACKOFF_MS = 4000;
+
+/** 等待指定毫秒；仅用于退避重试 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 读取上游建议的重试间隔（Retry-After，单位秒）。
+ * 缺失、不是数字或长到离谱时返回 null，由调用方用默认退避。
+ */
+function readRetryAfterMs(response: Response): number | null {
+  const raw = response.headers.get("retry-after");
+  if (!raw) {
+    return null;
+  }
+
+  const seconds = Number(raw.trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null;
+  }
+
+  return Math.min(seconds * 1000, MAX_BACKOFF_MS);
+}
+
+/**
  * 向一个端点发起请求，内部处理两类重试：
  *
- * 1. 429 / 5xx：上游抽风或被限流，等 800ms 重试一次
+ * 1. 429 / 5xx：逐步退避重试（尊重上游的 Retry-After）
  * 2. 400 且请求里带了 thinking：上游不认识这个参数，去掉后再试一次
  *
  * 网络层异常直接转成中文错误抛出，不在这里兜底。
@@ -176,10 +211,17 @@ async function sendWithRetry(
 
   let response = await send();
 
-  // 上游抽风（5xx）或被限流（429）时静默重试一次
-  if (!response.ok && (response.status === 429 || response.status >= 500)) {
-    console.warn("[EnglishBuddy] 上游异常，重试一次：", response.status);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+  // 上游抽风（5xx）或被限流（429）时逐步退避重试
+  for (let attempt = 0; attempt < RETRY_BACKOFF_MS.length; attempt += 1) {
+    if (response.ok || !(response.status === 429 || response.status >= 500)) {
+      break;
+    }
+
+    const waitMs = readRetryAfterMs(response) ?? RETRY_BACKOFF_MS[attempt];
+    console.warn(
+      `[EnglishBuddy] 上游返回 ${response.status}，等待 ${waitMs}ms 后重试（第 ${attempt + 1} 次）`,
+    );
+    await sleep(waitMs);
     response = await send();
   }
 
@@ -223,6 +265,12 @@ export async function createChatCompletionStream(
     }
 
     console.error("[EnglishBuddy] AI 接口返回异常状态：", response.status);
+
+    // 被限流和真故障要分开说：前者等几秒就好，说成「服务不可用」会让用户以为坏了
+    if (response.status === 429) {
+      throw new AppError("AI 有点忙，请稍等几秒再发一次 🙏", "AI_RATE_LIMITED", 429);
+    }
+
     throw new AppError("AI 服务暂时不可用，请稍后再试", "AI_UPSTREAM_ERROR", 502);
   }
 
