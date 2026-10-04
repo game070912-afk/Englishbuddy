@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "@/app/api/transcribe/route";
-import { resetAsrTokenCache } from "@/lib/api/asr";
 import type { TranscribeErrorResponse, TranscribeResponse } from "@/lib/types/transcribe";
 
 /** 构造一个发往 /api/transcribe 的请求 */
@@ -13,36 +12,41 @@ function createRequest(body: unknown): Request {
   });
 }
 
-/** 同时模拟百度的鉴权与识别两个接口 */
-function stubBaidu(result: unknown, tokenStatus = 200): void {
+/**
+ * 模拟 Groq 的 Whisper 识别接口，记录发出去的表单以便断言。
+ * 注意：调用方必须持有返回的 state 对象再读 sentForm，
+ * 不能直接解构——mock 是在请求发出之后才写入的。
+ */
+function stubWhisper(result: unknown): { sentForm: FormData | null } {
+  const state: { sentForm: FormData | null } = { sentForm: null };
+
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: unknown) => {
-      if (String(url).includes("aip.baidubce.com")) {
-        return new Response(JSON.stringify({ access_token: "token", expires_in: 2592000 }), {
-          status: tokenStatus,
-        });
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = init?.body as FormData | null | undefined;
+      // 不用 instanceof：vitest 与被测模块的 FormData 可能来自不同的类
+      if (body && typeof body.get === "function") {
+        state.sentForm = body;
       }
       return new Response(JSON.stringify(result), { status: 200 });
     }),
   );
+
+  return state;
 }
 
 describe("POST /api/transcribe", () => {
   beforeEach(() => {
-    resetAsrTokenCache();
-    process.env.BAIDU_ASR_API_KEY = "key";
-    process.env.BAIDU_ASR_SECRET_KEY = "secret";
+    process.env.ASR_API_KEY = "key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.BAIDU_ASR_API_KEY;
-    delete process.env.BAIDU_ASR_SECRET_KEY;
+    delete process.env.ASR_API_KEY;
   });
 
   it("未配置密钥时返回 501 与中文提示", async () => {
-    delete process.env.BAIDU_ASR_API_KEY;
+    delete process.env.ASR_API_KEY;
 
     const response = await POST(createRequest({ audio: "AAQC" }));
 
@@ -82,7 +86,7 @@ describe("POST /api/transcribe", () => {
   });
 
   it("正常录音返回识别出的文本", async () => {
-    stubBaidu({ err_no: 0, result: ["I want to practice English"] });
+    stubWhisper({ text: "I want to practice English" });
 
     const response = await POST(createRequest({ audio: "AAQC" }));
 
@@ -92,7 +96,7 @@ describe("POST /api/transcribe", () => {
   });
 
   it("上游没听清时返回友好提示，而不是原始响应", async () => {
-    stubBaidu({ err_no: 3301, err_msg: "speech quality error" });
+    stubWhisper({ text: "   " });
 
     const response = await POST(createRequest({ audio: "AAQC" }));
 
@@ -102,25 +106,14 @@ describe("POST /api/transcribe", () => {
     expect(payload.error.message).toContain("没听清");
   });
 
-  it("发给百度的请求里带上了英文模型与 16k 采样率", async () => {
-    let sentBody: BodyInit | null | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: unknown, init?: RequestInit) => {
-        if (String(url).includes("aip.baidubce.com")) {
-          return new Response(JSON.stringify({ access_token: "token", expires_in: 2592000 }));
-        }
-        sentBody = init?.body;
-        return new Response(JSON.stringify({ err_no: 0, result: ["hi"] }));
-      }),
-    );
+  it("发给 Whisper 的表单里带上了英文语言与音频文件", async () => {
+    const state = stubWhisper({ text: "hi" });
 
     await POST(createRequest({ audio: "AAQC" }));
 
-    const body = JSON.parse(String(sentBody)) as { dev_pid?: number; rate?: number; format?: string };
-    // 1737 = 英文模型；16000 = 百度要求的采样率
-    expect(body.dev_pid).toBe(1737);
-    expect(body.rate).toBe(16000);
-    expect(body.format).toBe("wav");
+    expect(state.sentForm).not.toBeNull();
+    expect(state.sentForm?.get("model")).toBe("whisper-large-v3-turbo");
+    expect(state.sentForm?.get("language")).toBe("en");
+    expect((state.sentForm?.get("file") as File | null)?.name).toBe("audio.wav");
   });
 });

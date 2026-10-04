@@ -20,7 +20,7 @@
 | 词汇查询与生词本 | ✅ 可用 | 结合上下文生成音标/释义/例句，登录后可收藏成卡片随时复习 |
 | 语音输入 | ✅ 可用（需配置） | 对话页按住麦克风说英语，松手转成文字回填输入框，改完再发送 |
 
-> 语音输入需要额外填百度语音的两条 Key（个人认证后有 3 万次免费额度）。不填也不影响其它功能，只是对话页不会出现麦克风按钮。详见 [docs/deploy.md](./docs/deploy.md)。
+> 语音输入与备用 AI 共用同一个 Groq Key：配好 `AI_FALLBACK_*` 三条（免费，见 [docs/free-ai-api.md](./docs/free-ai-api.md)），语音就能用，不用单独申请。不配也不影响其它功能，只是对话页不会出现麦克风按钮。详见 [docs/deploy.md](./docs/deploy.md)。
 
 **不用注册也能直接用**：匿名访客可以试试对话、纠错和查词，每 IP 10 分钟 20 次、对话上下文 6 条；登录后解锁完整额度、历史保存与生词本收藏。
 
@@ -30,7 +30,7 @@
 - Tailwind CSS 4
 - Supabase（已接入：邮箱登录 + Postgres + 行级安全策略 RLS）
 - AI 供应商可插拔：默认智谱 GLM-4.7-Flash（**免费**），可一键切换 DeepSeek 或任意 OpenAI 兼容服务
-- 语音转写：百度短语音识别（英文），同样收在 `lib/api/` 单处，换供应商只改一个文件
+- 语音转写：Groq whisper-large-v3-turbo（多语言模型，强制按英文识别），同样收在 `lib/api/` 单处，换供应商只改一个文件
 
 ## 本地开发
 
@@ -120,7 +120,7 @@ data: {"type":"done"}
 
 ### `POST /api/transcribe`
 
-语音转写接口。浏览器无法跨域直连百度的语音服务，所以录音经由本接口转发，密钥只在服务端读取。
+语音转写接口。浏览器录音转成文字必须经由服务端转发（密钥不能进前端，国内语音供应商也普遍禁止浏览器跨域直连），密钥只在服务端读取。
 
 请求体：
 
@@ -151,7 +151,7 @@ data: {"type":"done"}
 
 ## 部署
 
-Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`；要语音输入再加 `BAIDU_ASR_API_KEY` 与 `BAIDU_ASR_SECRET_KEY`。**改完环境变量记得 Redeploy**，否则不生效。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
+Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`；要语音输入就再配备用 AI 的 `AI_FALLBACK_*` 三条（语音与备用 AI 共用同一个 Groq Key）。**改完环境变量记得 Redeploy**，否则不生效。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
 
 ## 架构决策
 

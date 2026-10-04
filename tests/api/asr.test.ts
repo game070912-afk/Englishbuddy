@@ -1,96 +1,103 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { assertAsrConfigured, parseAsrPayload, resolveAsrConfig, resetAsrTokenCache, transcribeWav } from "@/lib/api/asr";
+import {
+  assertAsrConfigured,
+  parseTranscriptionPayload,
+  resolveAsrConfig,
+  transcribeWav,
+} from "@/lib/api/asr";
 
 /** 需要清理的环境变量，避免用例之间互相污染 */
-const MANAGED_KEYS = ["BAIDU_ASR_API_KEY", "BAIDU_ASR_SECRET_KEY"] as const;
+const MANAGED_KEYS = ["ASR_API_KEY", "ASR_BASE_URL", "AI_FALLBACK_API_KEY"] as const;
+
+function clearManagedKeys(): void {
+  for (const key of MANAGED_KEYS) {
+    delete process.env[key];
+  }
+}
 
 describe("resolveAsrConfig", () => {
-  afterEach(() => {
-    for (const key of MANAGED_KEYS) {
-      delete process.env[key];
-    }
-  });
+  afterEach(clearManagedKeys);
 
   it("未配置时读出空字符串", () => {
-    expect(resolveAsrConfig()).toEqual({ apiKey: "", secretKey: "" });
+    expect(resolveAsrConfig()).toEqual({ apiKey: "", baseUrl: "https://api.groq.com/openai/v1" });
   });
 
   it("读取环境变量并去掉首尾空格", () => {
-    process.env.BAIDU_ASR_API_KEY = "  key  ";
-    process.env.BAIDU_ASR_SECRET_KEY = " secret ";
+    process.env.ASR_API_KEY = "  key  ";
 
-    expect(resolveAsrConfig()).toEqual({ apiKey: "key", secretKey: "secret" });
+    expect(resolveAsrConfig().apiKey).toBe("key");
+  });
+
+  it("没配 ASR 专用密钥时回落到备用 AI 的 Groq Key", () => {
+    process.env.AI_FALLBACK_API_KEY = "gsk_fallback";
+
+    expect(resolveAsrConfig().apiKey).toBe("gsk_fallback");
+  });
+
+  it("专用密钥优先于备用 AI 的 Key", () => {
+    process.env.ASR_API_KEY = "asr-key";
+    process.env.AI_FALLBACK_API_KEY = "gsk_fallback";
+
+    expect(resolveAsrConfig().apiKey).toBe("asr-key");
+  });
+
+  it("可以覆盖接口地址", () => {
+    process.env.ASR_BASE_URL = "https://example.com/v1";
+
+    expect(resolveAsrConfig().baseUrl).toBe("https://example.com/v1");
   });
 });
 
 describe("assertAsrConfigured", () => {
-  afterEach(() => {
-    for (const key of MANAGED_KEYS) {
-      delete process.env[key];
-    }
-  });
+  afterEach(clearManagedKeys);
 
   it("缺密钥时抛出未配置错误", () => {
     expect(() => assertAsrConfigured()).toThrow("语音识别还没配置好");
   });
 
-  it("只填了一半也当作没配", () => {
-    process.env.BAIDU_ASR_API_KEY = "key";
-
-    expect(() => assertAsrConfigured()).toThrow("语音识别还没配置好");
-  });
-
-  it("两条都填了就不报错", () => {
-    process.env.BAIDU_ASR_API_KEY = "key";
-    process.env.BAIDU_ASR_SECRET_KEY = "secret";
+  it("只要有一条可用密钥就不报错", () => {
+    process.env.AI_FALLBACK_API_KEY = "gsk_fallback";
 
     expect(() => assertAsrConfigured()).not.toThrow();
   });
 });
 
-describe("parseAsrPayload", () => {
+describe("parseTranscriptionPayload", () => {
   it("正常结果里取出文本", () => {
-    expect(parseAsrPayload({ err_no: 0, result: ["hello world"] })).toBe("hello world");
+    expect(parseTranscriptionPayload({ text: "hello world" })).toBe("hello world");
   });
 
-  it("多段结果拼成一句话", () => {
-    expect(parseAsrPayload({ err_no: 0, result: ["hello", "world"] })).toBe("hello world");
+  it("文本两侧的空白被去掉", () => {
+    expect(parseTranscriptionPayload({ text: "  hi  " })).toBe("hi");
   });
 
   it("识别成功但没有内容时提示没听清", () => {
-    expect(() => parseAsrPayload({ err_no: 0, result: [] })).toThrow("没听清");
-    expect(() => parseAsrPayload({ err_no: 0 })).toThrow("没听清");
+    expect(() => parseTranscriptionPayload({ text: "   " })).toThrow("没听清");
+    expect(() => parseTranscriptionPayload({ text: "" })).toThrow("没听清");
   });
 
-  it("把百度的错误码翻译成人话", () => {
-    expect(() => parseAsrPayload({ err_no: 3301 })).toThrow("没听清");
-    expect(() => parseAsrPayload({ err_no: 3302 })).toThrow("密钥");
-    expect(() => parseAsrPayload({ err_no: 3308 })).toThrow("60 秒");
-    expect(() => parseAsrPayload({ err_no: 9999 })).toThrow("再试一次");
+  it("响应体缺 text 字段时给出通用提示", () => {
+    expect(() => parseTranscriptionPayload({})).toThrow("再试一次");
+    expect(() => parseTranscriptionPayload({ wrong: 1 })).toThrow("再试一次");
   });
 
   it("响应体不是对象时给出通用提示", () => {
-    expect(() => parseAsrPayload(null)).toThrow("再试一次");
-    expect(() => parseAsrPayload("boom")).toThrow("再试一次");
+    expect(() => parseTranscriptionPayload(null)).toThrow("再试一次");
+    expect(() => parseTranscriptionPayload("boom")).toThrow("再试一次");
   });
 });
 
 describe("transcribeWav", () => {
   beforeEach(() => {
-    resetAsrTokenCache();
-    process.env.BAIDU_ASR_API_KEY = "key";
-    process.env.BAIDU_ASR_SECRET_KEY = "secret";
+    clearManagedKeys();
+    process.env.ASR_API_KEY = "key";
   });
 
-  afterEach(() => {
-    for (const key of MANAGED_KEYS) {
-      delete process.env[key];
-    }
-  });
+  afterEach(clearManagedKeys);
 
   it("未配置密钥时直接拒绝，不发网络请求", async () => {
-    delete process.env.BAIDU_ASR_API_KEY;
+    delete process.env.ASR_API_KEY;
 
     await expect(transcribeWav("AAQC")).rejects.toThrow("语音识别还没配置好");
   });

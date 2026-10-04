@@ -10,7 +10,8 @@ import type { TranscribeErrorResponse, TranscribeResponse } from "@/lib/types/tr
  * 请求体：{ audio: string } —— 16kHz/16bit/单声道 WAV 的 base64
  * 响应：{ text: string }
  *
- * 浏览器无法跨域直连百度的语音服务，所以必须经由我们自己的接口转发；
+ * 浏览器录音转成文字必须经由服务端转发：一是密钥不能出现在前端，
+ * 二是国内供应商的语音接口基本都禁止浏览器跨域直连——
  * 这与「密钥只在服务端」的规则天然一致，不是额外妥协。
  */
 
