@@ -153,8 +153,11 @@ data: {"type":"done"}
 
 支持两个平台，环境变量完全一样（填 `AI_API_KEY`；要语音输入就再配备用 AI 的 `AI_FALLBACK_*` 三条，语音与备用 AI 共用同一个 Groq Key）：
 
-- **Zeabur（推荐）**：`*.zeabur.app` 国内可直接打开，免费额度够用，适合作品集给人看
+- **EdgeOne Pages（推荐）**：腾讯云边缘节点，`*.edgeone.app` 国内可直接打开，免费套餐，零配置支持 Next.js SSR
 - **Vercel**：海外访问快，但 **`*.vercel.app` 在国内打不开**（实测 Vercel 的 IP 段被封，换域名也没用）
+
+> 踩过的坑：原本推荐 Zeabur，但它的共享集群已在 2026 年停止服务，新项目必须买服务器或自带机器，
+> 零成本路线不再存在——详见 [docs/deploy.md](./docs/deploy.md)。平台免费政策会变，动手前先查官方文档。
 
 **改完环境变量要重新部署**，否则不生效。详细步骤、环境变量表与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
 

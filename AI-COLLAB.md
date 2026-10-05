@@ -230,3 +230,27 @@
   - 对话暂存选 sessionStorage 而不是「状态提升到 layout」：后者能解决切页面，但刷新仍会丢；前者连刷新也覆盖，且改动局限在一个组件内
   - 不引入 `verbose_json` 的 `no_speech_prob` 做服务端判空：本地 RMS 已经能挡住绝大多数情况，没必要为边缘情况多传一份响应
 - 我学到的一件事：**用户说「不准」时，先做对照实验再改参数**。这次如果直接换模型，我会误以为解决了问题，而实测数据说明模型只占很小一部分原因——把「哪些是我能修的、哪些不是」讲清楚，比闷头改一次更有价值
+
+## 2026-10-06（第十八次：平台选型翻车——Zeabur 免费路线已不存在）
+
+- 我下的指令：「Zeabur 供应商选什么？」→ 连发三张截图，依次卡在「服务器页要买服务器」
+  「集群页要上传 Kubeconfig」
+- AI 的排查：查 Zeabur 官方文档才发现根因——**共享集群已在 2026 年停止服务**。
+  官方原文：`New projects can no longer be created on shared clusters, and existing
+  shared cluster projects stopped accepting new services on April 1, 2026.
+  All new projects should use Servers.` 现在只剩「买服务器」和「自带机器」两条路
+- **这次是我的错**：推荐依据的是「免费 $5 额度 + 香港/新加坡共享区域」，那是停服前的信息，
+  来自二手评测而非官方文档。已经让他白点了三步
+- 我的修正动作：
+  - 实测一轮各平台国内可达性（不挂代理，对照组百度/GitHub 均 200）：
+    ✅ edgeone.app / pages.edgeone.ai / netlify.app / onrender.com / up.railway.app / deno.dev
+    ❌ workers.dev / fly.dev / vercel.app（对照）
+  - **改投 EdgeOne Pages（腾讯云）**：零配置支持 Next.js SSR/ISR，
+    有 Node Functions（我们用 `Buffer` 的代码不用担心兼容——这是它优于 Cloudflare Pages 的关键），
+    长期免费套餐，亚洲 2500+ 节点，实测国内可达
+  - deploy.md / README 同步更新，并把「Zeabur 已停服」作为踩坑记录写进文档
+- 待验证的风险（部署后实测）：函数单次执行上限通常 30 秒（项目里写的是 `maxDuration = 60`）；
+  Next 16 的 `proxy.ts` 中间件是否生效；SSE 流式在边缘节点会不会被缓冲
+- 我学到的一件事：**「免费额度」是有保质期的，二手评测的保质期更短**。
+  推荐任何平台前先去官方文档看当前状态，尤其涉及钱和免费额度的时候——
+  这次让他白折腾三张截图，比我自己多花两分钟查文档贵得多
