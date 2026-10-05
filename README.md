@@ -151,7 +151,12 @@ data: {"type":"done"}
 
 ## 部署
 
-Vercel 一键导入即可，环境变量填 `AI_PROVIDER=zhipu` 与 `AI_API_KEY`；要语音输入就再配备用 AI 的 `AI_FALLBACK_*` 三条（语音与备用 AI 共用同一个 Groq Key）。**改完环境变量记得 Redeploy**，否则不生效。详细步骤与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
+支持两个平台，环境变量完全一样（填 `AI_API_KEY`；要语音输入就再配备用 AI 的 `AI_FALLBACK_*` 三条，语音与备用 AI 共用同一个 Groq Key）：
+
+- **Zeabur（推荐）**：`*.zeabur.app` 国内可直接打开，免费额度够用，适合作品集给人看
+- **Vercel**：海外访问快，但 **`*.vercel.app` 在国内打不开**（实测 Vercel 的 IP 段被封，换域名也没用）
+
+**改完环境变量要重新部署**，否则不生效。详细步骤、环境变量表与常见坑见 [docs/deploy.md](./docs/deploy.md)，免费密钥获取见 [docs/free-ai-api.md](./docs/free-ai-api.md)。
 
 ## 架构决策
 
