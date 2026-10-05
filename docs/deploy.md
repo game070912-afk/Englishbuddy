@@ -17,7 +17,7 @@
    | `AI_FALLBACK_MODEL` | `openai/gpt-oss-20b` | 选填，同上 |
 
    还没有密钥？先看 [free-ai-api.md](./free-ai-api.md)，智谱 GLM-4.7-Flash **完全免费**，手机号注册即可，3 分钟搞定。
-   语音输入走 Groq 的 whisper-large-v3-turbo（免费 2000 次/天），**直接复用备用 AI 的 Groq Key**，
+   语音输入走 Groq 的 whisper-large-v3（免费 2000 次/天），**直接复用备用 AI 的 Groq Key**，
    不用单独申请；想单独用一把时才加 `ASR_API_KEY`。
    **备用 AI 不配也不会报错**，只是对话页不会出现麦克风按钮。
 

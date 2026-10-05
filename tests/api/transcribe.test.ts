@@ -112,7 +112,7 @@ describe("POST /api/transcribe", () => {
     await POST(createRequest({ audio: "AAQC" }));
 
     expect(state.sentForm).not.toBeNull();
-    expect(state.sentForm?.get("model")).toBe("whisper-large-v3-turbo");
+    expect(state.sentForm?.get("model")).toBe("whisper-large-v3");
     expect(state.sentForm?.get("language")).toBe("en");
     expect((state.sentForm?.get("file") as File | null)?.name).toBe("audio.wav");
   });

@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_AUDIO_BYTES,
   MAX_AUDIO_SECONDS,
+  SILENCE_RMS_THRESHOLD,
   TARGET_SAMPLE_RATE,
   base64ByteLength,
+  computeRms,
   encodeWavPcm16,
   isBase64,
+  isEffectivelySilent,
   toBase64,
 } from "@/lib/utils/audio";
 
@@ -96,5 +99,53 @@ describe("isBase64", () => {
     expect(isBase64("AAA=")).toBe(true);
     expect(isBase64("hello world!")).toBe(false);
     expect(isBase64("abc@123")).toBe(false);
+  });
+});
+
+/** 造一段正弦波，模拟一段声音 */
+function makeSine(amplitude: number, length = 1000): Float32Array {
+  const samples = new Float32Array(length);
+  for (let index = 0; index < length; index += 1) {
+    samples[index] = amplitude * Math.sin((index / length) * Math.PI * 20);
+  }
+  return samples;
+}
+
+describe("computeRms", () => {
+  it("空音频的能量是 0", () => {
+    expect(computeRms(new Float32Array(0))).toBe(0);
+  });
+
+  it("全零音频的能量是 0", () => {
+    expect(computeRms(new Float32Array(1000))).toBe(0);
+  });
+
+  it("恒定幅度 a 的正弦波，能量约为 a/√2", () => {
+    const rms = computeRms(makeSine(0.2));
+    expect(rms).toBeCloseTo(0.2 / Math.SQRT2, 2);
+  });
+
+  it("幅度越大能量越高，可以用来区分说话和安静", () => {
+    expect(computeRms(makeSine(0.1))).toBeGreaterThan(computeRms(makeSine(0.001)));
+  });
+});
+
+describe("isEffectivelySilent", () => {
+  it("纯静音会被判定为没声音", () => {
+    expect(isEffectivelySilent(new Float32Array(1000))).toBe(true);
+  });
+
+  it("幅度极小的底噪也算没声音", () => {
+    expect(isEffectivelySilent(makeSine(0.001))).toBe(true);
+  });
+
+  it("正常说话的音量不算静音", () => {
+    expect(isEffectivelySilent(makeSine(0.1))).toBe(false);
+  });
+
+  it("阈值本身是 -40dB 量级，正常说话远高于它", () => {
+    // 0.01 ≈ -40dB；正常说话的 RMS 通常在这个值的 5 倍以上
+    expect(SILENCE_RMS_THRESHOLD).toBe(0.01);
+    expect(computeRms(makeSine(0.1))).toBeGreaterThan(SILENCE_RMS_THRESHOLD * 5);
   });
 });

@@ -30,7 +30,7 @@
 - Tailwind CSS 4
 - Supabase（已接入：邮箱登录 + Postgres + 行级安全策略 RLS）
 - AI 供应商可插拔：默认智谱 GLM-4.7-Flash（**免费**），可一键切换 DeepSeek 或任意 OpenAI 兼容服务
-- 语音转写：Groq whisper-large-v3-turbo（多语言模型，强制按英文识别），同样收在 `lib/api/` 单处，换供应商只改一个文件
+- 语音转写：Groq whisper-large-v3（多语言模型，强制按英文识别），同样收在 `lib/api/` 单处，换供应商只改一个文件
 
 ## 本地开发
 

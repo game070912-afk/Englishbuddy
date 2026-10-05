@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import { requestTranscription } from "@/lib/api/transcribe-client";
-import { blobToWav16k, toBase64 } from "@/lib/utils/audio";
+import { audioBufferToWav16k, decodeAudioBlob, isEffectivelySilent, toBase64 } from "@/lib/utils/audio";
 
 /**
  * 自动停止录音的时长。
@@ -133,7 +133,17 @@ export default function VoiceInputButton({
 
       try {
         const blob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
-        const wav = await blobToWav16k(blob);
+        const decoded = await decodeAudioBlob(blob);
+
+        // 先量一下音量：Whisper 听到近乎静音的音频不会说「没听清」，
+        // 而是会凭空脑补一句话。本地拦掉既省一次请求，也不会让用户看到莫名其妙的文字。
+        // 麦克风录音基本都是单声道，取第一个声道就够。
+        if (isEffectivelySilent(decoded.getChannelData(0))) {
+          onError?.("没听到声音，靠近麦克风再说一次");
+          return;
+        }
+
+        const wav = await audioBufferToWav16k(decoded);
         const text = await requestTranscription(toBase64(wav));
         onTranscribed(text);
       } catch (error) {
