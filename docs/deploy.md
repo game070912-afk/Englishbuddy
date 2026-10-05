@@ -37,18 +37,26 @@
 EdgeOne Pages 是腾讯云的全栈部署平台，**零配置支持 Next.js 的 SSR / ISR**，
 并且有 Node Functions（支持 Node.js 生态），所以项目里用到的 `Buffer` 等 Node API 都能正常跑。
 
-1. 打开 Pages 控制台（国际区 <https://pages.edgeone.ai>），用 GitHub 账号登录
-   - **建议先用国际区**：不用备案、开通即用；中国区（腾讯云控制台内）节点在国内但需要实名/备案流程
-2. 连接 GitHub，选中 `Englishbuddy` 仓库
-3. 框架会自动识别成 Next.js，一般不用改构建配置；如有必要填：
+1. 打开 EdgeOne 控制台注册/登录：**用微信扫码或腾讯云账号登录**
+   （不是 GitHub 登录——GitHub 是第 3 步导入仓库时才授权的）。
+   第一次用腾讯云需要完成实名认证
+2. 进入控制台后，点 **「导入 Git 仓库」**
+3. 选 **GitHub** 图标 → 跳到 GitHub 授权页 → 建议选「Only select repositories」
+   只勾 `Englishbuddy`（最小权限），然后 Install
+4. 配置构建：框架预设选 **Next.js**，平台会自动填好大部分配置，
+   照着核对一遍即可：
 
    | 项 | 值 |
    | --- | --- |
+   | 根目录 | `./` |
    | Build Command | `pnpm build` |
-   | Output Directory | 交给平台自动识别 |
+   | Output Directory | `.next` |
+   | Node 版本 | 默认（通常 22，本地不一致时再改） |
 
-4. 在环境变量里添加下面这张表，然后**重新部署一次**
-5. 拿到 `*.edgeone.app` 域名后验证：`/` 首页、`/chat` 对话、`/correct` 批改
+5. **加速区域**：选**中国大陆**（节点在国内，访问最快）。
+   用平台送的免费域名不需要备案——只有以后绑定自己的域名才涉及备案
+6. 点「开始部署」，完成后在环境变量里添加下面这张表，**再重新部署一次**
+7. 拿到 `*.edgeone.app` 域名后验证：`/` 首页、`/chat` 对话、`/correct` 批改
 
 ### 环境变量
 
