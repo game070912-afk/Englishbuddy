@@ -2,6 +2,7 @@ import { AppError, toAppError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/api/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { assertQuota } from "@/lib/api/usage-guard";
 import { MAX_MESSAGE_LENGTH, MAX_TOPIC_LENGTH, sanitizeUserText } from "@/lib/utils/validate";
 
 /** 一次最多保存的消息条数，防止超大请求 */
@@ -90,6 +91,9 @@ export async function POST(request: Request): Promise<Response> {
     if (!user) {
       throw new AppError("请先登录", "UNAUTHORIZED", 401);
     }
+
+    // 这个接口不烧 AI 额度，但会写数据库，同样挡一道防刷
+    assertQuota(request, user.id);
 
     const raw: unknown = await request.json();
     const body = parseSaveRequestBody(raw);

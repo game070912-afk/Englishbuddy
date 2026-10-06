@@ -7,7 +7,7 @@ import {
 import { getCurrentUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildCorrectorSystemPrompt } from "@/lib/api/prompts";
-import { assertAnonymousQuota } from "@/lib/api/usage-guard";
+import { assertQuota } from "@/lib/api/usage-guard";
 import type {
   CorrectionRequestBody,
   CorrectionStreamEvent,
@@ -58,9 +58,8 @@ export async function POST(request: Request): Promise<Response> {
   const user = await getCurrentUser();
 
   try {
-    if (!user) {
-      assertAnonymousQuota(request);
-    }
+    // 匿名和登录都限：只限匿名的话，注册个小号就能整个绕过去
+    assertQuota(request, user?.id ?? null);
   } catch (error) {
     return buildErrorResponse(toAppError(error));
   }
