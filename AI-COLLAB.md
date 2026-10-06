@@ -254,3 +254,25 @@
 - 我学到的一件事：**「免费额度」是有保质期的，二手评测的保质期更短**。
   推荐任何平台前先去官方文档看当前状态，尤其涉及钱和免费额度的时候——
   这次让他白折腾三张截图，比我自己多花两分钟查文档贵得多
+
+## 第十九次：迁移 EdgeOne Makers 落地，顺手修掉一个「整站 500」（2026-10-07）
+
+- 小胡在 EdgeOne 控制台完成部署（微信扫码登录 → 导入 GitHub 仓库 → 选「全球可用区（不含中国大陆）」），
+  拿到域名 `englishbuddy.edgeone.dev`，开了自动部署——Push 即重新部署，不用手动点
+- 首次验收：国内直连 401（官方文档写明的地区拦截，预期内）；**挂代理模拟境外访问是 500**——这说明有真 bug
+- 根因（响应体直接给了答案）：`Middleware execution failed ... Node.js detected but native WebSocket not found`
+  - EdgeOne Makers 的函数运行时是 **Node 20**，没有全局 WebSocket（Node 22 才内置）
+  - `@supabase/supabase-js` 创建客户端时会**立刻**通过 realtime-js 探测 WebSocket，找不到就 throw
+  - `proxy.ts` 中间件创建 Supabase 客户端 → 抛错 → 整站 500
+- 我的修复（`7e084a0`）：
+  - 新增 `lib/supabase/realtime.ts`：显式给 realtime 传 `transport`（realtime-js 源码里传入的 transport 优先于环境探测，这是官方建议的绕法）。本项目从不订阅 realtime 频道，所以占位实现足够，不必引入 `ws` 依赖
+  - `proxy.ts` 整段包 try/catch：刷新 token 失败只放行——**中间件不该是单点故障**，这是这次事故教会我的架构原则
+  - 新增 3 个测试锁住「没有原生 WebSocket 也要给出 transport」
+- 修复后的完整验收（挂代理）：
+  - `/`、`/chat`、`/correct` 全部 200
+  - `/api/chat` SSE 流式正常，一个词一个词吐（之前担心的「边缘节点缓冲 SSE」没有发生）
+  - `/api/transcribe` 用 JFK 真实语音测试，识别**逐字正确**
+- 验证过的之前存疑项：`proxy.ts` 中间件在 EdgeOne 上**生效**（构建输出有 `ƒ Proxy (Middleware)`，且它的报错就是证据）；SSE 不被缓冲
+- 仍未解决：国内直连 401。唯一出路是绑自己的域名（这一档不要求备案），涉及花钱，等小胡拍板
+- 我学到的一件事：**看到 500 先读响应体再猜**。这次的错误信息把根因和官方建议的修法都写全了，
+  我要是先去搜「EdgeOne 500」之类的关键词，又要多绕一圈
