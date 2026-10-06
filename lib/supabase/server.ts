@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/supabase/config";
+import { realtimeOptions } from "@/lib/supabase/realtime";
 
 /**
  * 服务端 Supabase 客户端，用于 Server Component、Server Action 与 Route Handler。
@@ -19,6 +20,7 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    ...realtimeOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();

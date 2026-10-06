@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/supabase/config";
+import { realtimeOptions } from "@/lib/supabase/realtime";
 
 /**
  * 刷新 Supabase 登录态。
@@ -21,27 +22,36 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  // 整段包 try/catch：刷新 token 只是锦上添花，它失败不该把整站拖成 500。
+  // 实测踩过：EdgeOne Makers 的函数运行时是 Node 20，没有全局 WebSocket，
+  // 创建 Supabase 客户端会直接抛错，中间件一挂全站 500。
+  // 放行只是让本次请求不刷新 token，用户重新登录即可恢复。
+  try {
+    const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      ...realtimeOptions(),
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          // 先把新 cookie 写回请求，让本次请求后续的处理能读到最新登录态
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
+          response = NextResponse.next({ request });
+          // 再写回响应，让浏览器更新自己的 cookie
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
       },
-      setAll(cookiesToSet) {
-        // 先把新 cookie 写回请求，让本次请求后续的处理能读到最新登录态
-        for (const { name, value } of cookiesToSet) {
-          request.cookies.set(name, value);
-        }
-        response = NextResponse.next({ request });
-        // 再写回响应，让浏览器更新自己的 cookie
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
-      },
-    },
-  });
+    });
 
-  // 调用 getUser() 会触发 token 刷新；不要用 getSession()，那个不校验签名
-  await supabase.auth.getUser();
+    // 调用 getUser() 会触发 token 刷新；不要用 getSession()，那个不校验签名
+    await supabase.auth.getUser();
+  } catch {
+    return response;
+  }
 
   return response;
 }
