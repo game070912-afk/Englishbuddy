@@ -93,7 +93,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // 这个接口不烧 AI 额度，但会写数据库，同样挡一道防刷
-    assertQuota(request, user.id);
+    await assertQuota(request, user.id);
 
     const raw: unknown = await request.json();
     const body = parseSaveRequestBody(raw);

@@ -138,7 +138,7 @@ export async function POST(request: Request): Promise<Response> {
     const user = await getCurrentUser();
 
     // 匿名和登录都限：只限匿名的话，注册个小号就能整个绕过去
-    assertQuota(request, user?.id ?? null);
+    await assertQuota(request, user?.id ?? null);
 
     // request.json() 遇到非 JSON 会抛 SyntaxError，单独接住转成 400
     let raw: unknown;
