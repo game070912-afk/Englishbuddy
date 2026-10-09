@@ -2,7 +2,7 @@ import { createChatCompletionStream, streamTextDeltas, type CompletionMessage } 
 import { getCurrentUser } from "@/lib/api/auth";
 import { AppError, toAppError } from "@/lib/api/errors";
 import { buildTutorSystemPrompt } from "@/lib/api/prompts";
-import { assertQuota } from "@/lib/api/usage-guard";
+import { assertGlobalQuota, assertQuota } from "@/lib/api/usage-guard";
 import type { ChatRequestBody, ChatErrorResponse, ChatStreamEvent } from "@/lib/types/chat";
 import { parseChatRequestBody, trimMessagesByBudget } from "@/lib/utils/validate";
 
@@ -50,6 +50,8 @@ export async function POST(request: Request): Promise<Response> {
   try {
     // 匿名和登录都限：只限匿名的话，注册个小号就能整个绕过去
     await assertQuota(request, user?.id ?? null);
+    // 全站总闸：边缘节点拿不到真实 IP，光按 IP 计数拦不住脚本
+    await assertGlobalQuota();
   } catch (error) {
     return buildErrorResponse(toAppError(error));
   }

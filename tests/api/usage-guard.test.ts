@@ -24,6 +24,11 @@ function requestFrom(ip: string): Request {
   });
 }
 
+/** 造一个带任意请求头的请求 */
+function requestWithHeaders(headers: Record<string, string>): Request {
+  return new Request("http://localhost/api/chat", { method: "POST", headers });
+}
+
 /** 连续调用 n 次，全部应当放行 */
 async function callTimes(request: Request, userId: string | null, times: number): Promise<void> {
   for (let i = 0; i < times; i += 1) {
@@ -78,6 +83,19 @@ describe("assertQuota（内存兜底）", () => {
     await expect(assertQuota(request, "user-c")).rejects.toBeInstanceOf(AppError);
 
     await expect(assertQuota(request, "user-d")).resolves.toBeUndefined();
+  });
+
+  it("有 EO-Client-IP 时按它计数，XFF 靠边站——否则边缘节点 IP 会把计数摊薄", async () => {
+    const request = requestWithHeaders({
+      "eo-client-ip": "10.7.7.1",
+      "x-forwarded-for": "10.9.9.9",
+    });
+
+    await callTimes(request, null, 20);
+    await expect(assertQuota(request, null)).rejects.toBeInstanceOf(AppError);
+
+    // 同样的 XFF 但不带厂商专用头，应当是另一个桶，不受上面影响
+    await expect(assertQuota(requestFrom("10.9.9.9"), null)).resolves.toBeUndefined();
   });
 
   it("窗口过期后额度重置", async () => {
